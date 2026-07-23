@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#071a14" />
+    <title>Court Piece — Play with friends</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e3b2e'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23e9bb62'%3E♠%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Fraunces:opsz,wght@9..144,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <main id="app">
+      <section id="home" class="home shell">
+        <div class="brand-mark">H</div>
+        <p class="eyebrow">Private table · four friends</p>
+        <h1>Court Piece</h1>
+        <p class="lede">Call the hukum. Read the table. Take the match.</p>
+
+        <div class="join-card">
+          <label for="name">Your name</label>
+          <input id="name" maxlength="18" autocomplete="name" placeholder="e.g. Swapnil" />
+          <div class="room-row">
+            <input id="room-code" maxlength="5" autocomplete="off" placeholder="ROOM CODE" />
+            <button id="join-button" class="secondary">Join table</button>
+          </div>
+          <button id="spectate-button" class="spectate-button secondary">Watch as spectator</button>
+          <div class="or"><span>or</span></div>
+          <button id="create-button" class="primary">Create a private table</button>
+          <p id="home-error" class="error" role="alert"></p>
+        </div>
+        <p class="fine-print">No account. Share one code. Best played in portrait.</p>
+      </section>
+
+      <section id="game" class="game hidden">
+        <header class="game-header">
+          <div>
+            <span class="mini-label">ROOM</span>
+            <button id="copy-code" class="room-code" title="Copy invite link"></button>
+            <div class="room-tools">
+              <button id="restart-button" class="text-button hidden">Restart</button>
+              <button id="exit-button" class="text-button danger">Exit</button>
+            </div>
+          </div>
+          <div class="scoreboard">
+            <span>Team A <b id="score-a">0</b></span>
+            <i></i>
+            <span>Team B <b id="score-b">0</b></span>
+            <small>First to 4</small>
+          </div>
+        </header>
+
+        <div class="game-meta">
+          <div id="status" class="status-pill">Waiting for players</div>
+          <div id="turn-timer" class="turn-timer hidden"><span id="timer-value">40</span>s</div>
+          <div id="trump-badge" class="trump-badge hidden"></div>
+        </div>
+
+        <div id="spectator-bar" class="spectator-bar hidden">
+          <span>Watching</span>
+          <select id="watch-player"></select>
+          <b id="spectator-count"></b>
+        </div>
+
+        <div class="table-wrap">
+          <div class="table">
+            <div id="seat-2" class="seat seat-top"></div>
+            <div id="seat-1" class="seat seat-left"></div>
+            <div id="seat-3" class="seat seat-right"></div>
+            <div id="seat-0" class="seat seat-bottom"></div>
+            <div id="trick" class="trick"></div>
+            <div id="deal-score" class="deal-score hidden"></div>
+          </div>
+        </div>
+
+        <section id="lobby-panel" class="panel lobby-panel hidden">
+          <h2>Your table is ready</h2>
+          <p>Share the room code with three friends. Partners sit opposite each other.</p>
+          <div class="settings-grid">
+            <label>Deck
+              <select id="deck-size"></select>
+            </label>
+            <label>Mode
+              <select id="game-mode">
+                <option value="single">Single Sir</option>
+                <option value="double">Double Sir</option>
+                <option value="hidden">Hidden Sir</option>
+              </select>
+            </label>
+          </div>
+          <button id="share-button" class="secondary">Share invite</button>
+          <button id="start-button" class="primary">Start game</button>
+          <p id="lobby-note" class="hint"></p>
+        </section>
+
+        <section id="trump-panel" class="panel trump-panel hidden">
+          <p class="eyebrow">You saw five cards</p>
+          <h2>Choose the hukum</h2>
+          <p id="trump-help"></p>
+          <div id="suit-buttons" class="suit-buttons"></div>
+          <button id="pass-button" class="pass-button secondary">Pass to next player</button>
+        </section>
+
+        <button id="reveal-button" class="reveal-button hidden">Reveal hukum</button>
+
+        <section id="round-panel" class="panel round-panel hidden">
+          <p id="round-result"></p>
+          <button id="next-button" class="primary">Deal next round</button>
+        </section>
+
+        <section id="restart-panel" class="panel restart-panel hidden">
+          <p class="eyebrow">Restart request</p>
+          <h2 id="restart-title">Restart this match?</h2>
+          <p id="restart-note"></p>
+          <div id="restart-actions" class="restart-actions">
+            <button id="decline-restart" class="secondary">Decline</button>
+            <button id="accept-restart" class="primary">Accept restart</button>
+          </div>
+        </section>
+
+        <div id="hand-label" class="hand-label hidden">Your hand</div>
+        <div id="hand" class="hand"></div>
+        <p id="game-error" class="error floating-error" role="alert"></p>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
