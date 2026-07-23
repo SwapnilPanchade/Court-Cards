@@ -55,7 +55,7 @@
             <span>Team A <b id="score-a">0</b></span>
             <i></i>
             <span>Team B <b id="score-b">0</b></span>
-            <small><svg class="icon trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"/></svg>First to 4</small>
+            <small><svg class="icon trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"/></svg>Match score</small>
           </div>
         </header>
 
@@ -77,32 +77,9 @@
 
         <div class="table-wrap">
           <div class="table">
-            <svg class="table-dealer" viewBox="0 0 160 200" aria-hidden="true">
-              <defs>
-                <linearGradient id="dealerDress" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#ff5fa2"/>
-                  <stop offset="1" stop-color="#7c3fd6"/>
-                </linearGradient>
-              </defs>
-              <ellipse cx="80" cy="186" rx="48" ry="9" fill="rgba(0,0,0,.3)"/>
-              <path d="M38 200 C38 138 45 116 80 116 C115 116 122 138 122 200 Z" fill="url(#dealerDress)"/>
-              <path d="M64 116 L80 133 L96 116 Z" fill="#120a2b"/>
-              <circle cx="80" cy="121" r="6.5" fill="#ffc857"/>
-              <rect x="69" y="96" width="22" height="26" rx="9" fill="#f0c29a"/>
-              <g transform="translate(100,120) rotate(20)">
-                <rect x="0" y="0" width="22" height="30" rx="3" fill="#fbf8ec" stroke="#cfc7ad"/>
-                <rect x="-7" y="-4" width="22" height="30" rx="3" fill="#fbf8ec" stroke="#cfc7ad" transform="rotate(-16 -7 -4)"/>
-              </g>
-              <circle cx="80" cy="70" r="35" fill="#f3cba4"/>
-              <path d="M44 68 C42 30 118 30 116 68 C116 46 97 36 80 36 C63 36 44 46 44 68Z" fill="#4a2c1a"/>
-              <path d="M44 68 C38 96 45 120 58 131 C49 110 49 86 51 70Z" fill="#4a2c1a"/>
-              <path d="M116 68 C122 96 115 120 102 131 C111 110 111 86 109 70Z" fill="#4a2c1a"/>
-              <circle cx="60" cy="80" r="7" fill="#ff9fb8" opacity=".55"/>
-              <circle cx="100" cy="80" r="7" fill="#ff9fb8" opacity=".55"/>
-              <circle cx="67" cy="72" r="3.6" fill="#20130a"/>
-              <circle cx="93" cy="72" r="3.6" fill="#20130a"/>
-              <path d="M69 89 Q80 97 91 89" stroke="#20130a" stroke-width="3" fill="none" stroke-linecap="round"/>
-            </svg>
+            <div id="center-deck" class="center-deck hidden" aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
             <div id="seat-2" class="seat seat-top"></div>
             <div id="seat-1" class="seat seat-left"></div>
             <div id="seat-3" class="seat seat-right"></div>

@@ -102,7 +102,6 @@ function finishCompletedTrick(room, round) {
   collectTrick(round);
   if (round.phase === "round_over") {
     room.score[round.winner] += 1;
-    if (room.score[round.winner] >= room.matchTarget) room.matchWinner = round.winner;
   }
   room.updatedAt = Date.now();
   scheduleTurn(room);

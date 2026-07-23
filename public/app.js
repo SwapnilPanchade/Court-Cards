@@ -109,6 +109,7 @@ function relativeSeat(absoluteSeat) {
 }
 
 function renderSeats() {
+  const isNewDeal = Boolean(state.round) && (!previousState?.round || previousState.round.dealer !== state.round.dealer);
   for (let absolute = 0; absolute < 4; absolute += 1) {
     const position = relativeSeat(absolute);
     const player = state.players[absolute];
@@ -118,7 +119,7 @@ function renderSeats() {
     const captured = state.round?.capturedBySeat?.[absolute] || 0;
     const capturedChanged = captured > (previousState?.round?.capturedBySeat?.[absolute] || 0);
     const cardBacks = state.round && absolute !== perspectiveSeat() && remaining
-      ? `<div class="seat-cards" aria-label="${remaining} cards remaining"><i></i><i></i><i></i><span>${remaining}</span></div>`
+      ? `<div class="seat-cards ${isNewDeal ? "dealt" : ""}" aria-label="${remaining} cards remaining"><i></i><i></i><i></i><span>${remaining}</span></div>`
       : "";
     const pile = captured
       ? `<div class="captured-pile ${capturedChanged ? "new-capture" : ""}" title="${captured} captured trick${captured === 1 ? "" : "s"}"><i></i><i></i><span>${captured}</span></div>`
@@ -283,6 +284,7 @@ function render() {
   const dealScore = $("#deal-score");
   dealScore.classList.toggle("hidden", !state.round || state.round.phase === "choosing_trump");
   if (state.round) dealScore.textContent = `TRICKS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`;
+  $("#center-deck").classList.toggle("hidden", !state.round);
   const spectatorBar = $("#spectator-bar");
   spectatorBar.classList.toggle("hidden", !isSpectator());
   if (isSpectator()) {
