@@ -80,7 +80,8 @@ async function main() {
   }
 
   assert.equal(state.score[0] + state.score[1], 1);
-  assert.equal(Math.max(...state.round.tricks), 5);
+  assert.equal(state.round.handCounts.every((count) => count === 0), true);
+  assert.equal(state.round.tricks[0] + state.round.tricks[1], 9);
 
   await action(clients[2], "request_restart");
   await action(clients[0], "respond_restart", { accept: true });

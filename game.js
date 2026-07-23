@@ -73,6 +73,10 @@ function createRound(dealer, settings = {}, random = Math.random) {
     completedTricks: [],
     tricks: [0, 0],
     capturedBySeat: [0, 0, 0, 0],
+    // Every completed trick is shown in the winner's on-table bundle. This is
+    // deliberately separate from `capturedBySeat`, which is the scored bundle
+    // in Sir modes and can stay at zero while a pool is still pending.
+    collectedBySeat: [0, 0, 0, 0],
     pool: 0,
     lastTrickWinner: null,
     passedBy: [],
@@ -155,6 +159,7 @@ function collectTrick(round) {
   const winner = round.trick.find((play) => play.seat === winnerSeat);
   if (!winner) throw new Error("Trick winner is missing.");
     const team = teamForSeat(winner.seat);
+    round.collectedBySeat[winner.seat] += 1;
     round.pool += 1;
 
     if (round.mode === "single") {
@@ -184,8 +189,10 @@ function collectTrick(round) {
       round.pool = 0;
     }
 
-    const majority = Math.floor(round.cardsPerPlayer / 2) + 1;
-    const shouldEnd = round.mode === "single" ? round.tricks[team] >= majority : isLastTrick;
+    // Finish the deal only after every card has been played. A majority can
+    // decide the eventual winner, but cutting the deal short hides cards and
+    // makes the final trick bundles confusing for the table.
+    const shouldEnd = isLastTrick;
     if (shouldEnd) {
       round.phase = "round_over";
       round.winner = round.tricks[0] > round.tricks[1] ? 0 : 1;

@@ -163,11 +163,14 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .seat-bottom .seat-cards.dealt i, .seat-bottom .seat-cards.dealt span { animation: dealSeatFromAbove .45s ease-out both; }
 .seat-left .seat-cards.dealt i, .seat-left .seat-cards.dealt span { animation: dealSeatFromRight .45s ease-out both; }
 .seat-right .seat-cards.dealt i, .seat-right .seat-cards.dealt span { animation: dealSeatFromLeft .45s ease-out both; }
-.captured-pile { position: absolute; top: 5px; right: -17px; width: 29px; height: 37px; }
+.captured-pile { position: absolute; top: 2px; right: -23px; width: 32px; height: 40px; z-index: 5; }
 .captured-pile i { position: absolute; inset: 0; border-radius: 4px; border: 1px solid rgba(255,255,255,.4); background: linear-gradient(135deg, var(--gold-soft), var(--gold-deep)); box-shadow: 0 4px 10px rgba(0,0,0,.3); }
 .captured-pile i:first-child { transform: translate(-3px, 3px) rotate(-5deg); opacity: .65; }
 .captured-pile span { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; color: #241505; font-weight: 800; font-size: 12px; }
 .captured-pile.new-capture { animation: capturePop .65s ease-out; }
+.seat-bottom .captured-pile { top: -7px; right: -31px; }
+.seat-left .captured-pile { top: -6px; right: -24px; }
+.seat-right .captured-pile { top: -6px; right: -24px; }
 .trick { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .trick.resolved .played-card { animation: trickPulse .75s ease-in-out infinite alternate; }
 .trick-winner { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 7; white-space: nowrap; padding: 7px 10px; border-radius: 14px; background: rgba(5,7,10,.92); border: 1px solid rgba(242,184,74,.5); color: var(--gold); font-size: 10px; font-weight: 700; animation: winnerIn .25s ease-out; }
@@ -210,7 +213,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .reveal-button { position: fixed; z-index: 18; left: 50%; bottom: 128px; transform: translateX(-50%); background: var(--gold); color: #211605; box-shadow: 0 8px 25px rgba(0,0,0,.4); }
 .red { color: var(--red) !important; }
 .hand-label { width: min(100%, 760px); margin: 0 auto -2px; padding-left: 4px; color: #626a7a; font-size: 9px; text-transform: uppercase; letter-spacing: .16em; }
-.hand { min-height: 130px; display: flex; justify-content: flex-start; align-items: flex-end; padding: 10px 0 0; overflow: visible; margin-inline: auto; }
+.hand { min-height: 130px; display: flex; justify-content: flex-start; align-items: flex-end; gap: 5px; padding: 10px 7px 4px; overflow-x: auto; overflow-y: visible; margin-inline: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: none; }
+.hand::-webkit-scrollbar { display: none; }
 .card {
   flex: 0 0 var(--card-w);
   width: var(--card-w);
@@ -241,7 +245,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   transform-origin: bottom center;
   transition: transform .18s ease-out, box-shadow .18s ease-out;
 }
-.hand .card + .card { margin-left: var(--hand-overlap, -28px); }
+.hand .card { scroll-snap-align: center; }
+.hand .card + .card { margin-left: 0; }
 .hand .card:hover:not(:disabled), .hand .card.playable:focus {
   transform: translateY(calc(var(--card-arc, 0) - 14px)) rotate(var(--card-rotate, 0deg)) scale(1.05);
   box-shadow: 0 16px 32px rgba(0,0,0,.5);
@@ -253,6 +258,13 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .floating-error:not(:empty) { display: block; }
 .toast { position: fixed; left: 50%; top: 20px; transform: translate(-50%, -10px); opacity: 0; background: var(--ink); color: var(--bg-1); padding: 9px 14px; border-radius: 20px; font-size: 12px; z-index: 50; transition: .2s; pointer-events: none; }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
+.streak-effect { --effect-x: 50%; --effect-y: 50%; position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; pointer-events: none; opacity: 0; color: #fff7da; font-size: clamp(15px, 3.4vw, 24px); font-weight: 800; letter-spacing: .03em; text-align: center; text-shadow: 0 2px 10px #03120d, 0 0 20px rgba(255,206,78,.5); }
+.streak-effect::before, .streak-effect::after { content: ""; position: absolute; left: var(--effect-x); top: var(--effect-y); width: 16%; height: 16%; border-radius: 50%; opacity: 0; transform: translate(-50%, -50%); }
+.streak-effect.show { animation: streakText 2.2s cubic-bezier(.16,.8,.24,1) both; }
+.streak-effect.spark::before { background: radial-gradient(circle, #fff4b8 0 8%, #ffc857 12%, rgba(255,163,45,.5) 30%, transparent 68%); box-shadow: 0 0 28px 12px rgba(255,184,74,.65); animation: sparkBurst 1.8s ease-out both; }
+.streak-effect.thunder::before { width: 78%; height: 78%; background: linear-gradient(115deg, transparent 43%, rgba(238,250,255,.98) 48%, rgba(91,193,255,.65) 50%, transparent 54%); filter: drop-shadow(0 0 16px #74d4ff); animation: lightning 1.65s ease-out both; }
+.streak-effect.fire::before { width: 72%; height: 72%; background: radial-gradient(circle at 50% 55%, rgba(255,234,132,.9), rgba(255,122,25,.58) 26%, rgba(229,48,19,.26) 48%, transparent 70%); filter: blur(2px); animation: fireGlow 2s ease-out both; }
+.streak-effect.fire::after { width: 82%; height: 82%; border: 2px solid rgba(255,184,74,.8); box-shadow: 0 0 35px 15px rgba(255,80,20,.48); animation: fireRing 1.85s ease-out both; }
 
 @keyframes trickPulse { from { filter: brightness(1); } to { filter: brightness(1.14); box-shadow: 0 0 20px rgba(242,184,74,.4); } }
 @keyframes winnerIn { from { opacity: 0; transform: translate(-50%,-40%) scale(.88); } }
@@ -261,6 +273,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 @keyframes timerPulse { from { background: rgba(255,90,110,.1); } to { background: rgba(255,90,110,.3); } }
 @keyframes panelDropIn { from { opacity: 0; transform: translate(-50%, -14px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes deckBreathe { 0%, 100% { transform: translate(0, -4px) rotate(0deg); } 50% { transform: translate(0, -6px) rotate(0deg); } }
+@keyframes streakText { 0%, 100% { opacity: 0; transform: scale(.84); } 12%, 74% { opacity: 1; transform: scale(1); } }
+@keyframes sparkBurst { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.1); } 16% { opacity: 1; } 72% { opacity: .9; transform: translate(-50%, -50%) scale(7); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(8); } }
+@keyframes lightning { 0%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(.7); } 12% { opacity: 1; } 22% { opacity: .15; } 31% { opacity: .95; } 50% { opacity: .2; transform: translate(-50%, -50%) scale(1); } 68% { opacity: 0; } }
+@keyframes fireGlow { 0%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(.35); } 20%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes fireRing { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25); } 18% { opacity: .95; } 78% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); } 100% { opacity: 0; } }
 
 @keyframes dealIn {
   0% { opacity: 0; transform: translateY(-180px) rotate(calc(var(--card-rotate, 0deg) + 340deg)) scale(.4); }
@@ -296,7 +313,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .game-meta { min-height: 0; margin: 0; }
   .table-wrap { padding: 0 130px; }
   .table { width: min(78vw, 620px); height: min(86vh, 340px); }
-  .hand { min-height: 92px; padding-top: 4px; }
+  .hand { min-height: 92px; gap: 3px; padding-top: 4px; --hand-card-w: clamp(46px, 10vw, 60px); }
   .hand-label { display: none; }
   .panel { left: auto; right: 12px; bottom: 12px; transform: none; width: min(260px, 32vw); max-height: 90vh; overflow-y: auto; }
   .trump-panel { left: auto; right: 12px; top: 50%; bottom: auto; transform: translateY(-50%); max-height: 90vh; }

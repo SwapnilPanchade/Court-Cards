@@ -55,7 +55,7 @@ test("caller can pass hukum to the next player but the fourth caller must choose
 
 test("winner of a completed trick leads next", () => {
   const round = {
-    phase: "playing", mode: "single", cardsPerPlayer: 13, trump: "spades", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [0, 0], capturedBySeat: [0, 0, 0, 0], pool: 0, lastTrickWinner: null, pendingWinner: null,
+    phase: "playing", mode: "single", cardsPerPlayer: 1, trump: "spades", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [0, 0], capturedBySeat: [0, 0, 0, 0], collectedBySeat: [0, 0, 0, 0], pool: 0, lastTrickWinner: null, pendingWinner: null,
     hands: [[card("A", "hearts", 12)], [card("2", "hearts", 0)], [card("K", "hearts", 11)], [card("3", "hearts", 1)]]
   };
   playCard(round, 0, "A-hearts");
@@ -70,16 +70,15 @@ test("winner of a completed trick leads next", () => {
   assert.deepEqual(round.capturedBySeat, [1, 0, 0, 0]);
 });
 
-test("round ends as a court when a team wins seven unanswered tricks", () => {
+test("single sir keeps playing after a majority until every card is played", () => {
   const round = {
-    phase: "playing", mode: "single", cardsPerPlayer: 13, trump: "clubs", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [6, 0], capturedBySeat: [6, 0, 0, 0], pool: 0, lastTrickWinner: null, pendingWinner: null,
+    phase: "playing", mode: "single", cardsPerPlayer: 13, trump: "clubs", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [6, 0], capturedBySeat: [6, 0, 0, 0], collectedBySeat: [6, 0, 0, 0], pool: 0, lastTrickWinner: null, pendingWinner: null,
     hands: [[card("A", "hearts", 12)], [card("2", "hearts", 0)], [card("K", "hearts", 11)], [card("3", "hearts", 1)]]
   };
   [0, 1, 2, 3].forEach((seat) => playCard(round, seat, round.hands[seat][0].id));
   collectTrick(round);
-  assert.equal(round.phase, "round_over");
-  assert.equal(round.winner, 0);
-  assert.equal(round.court, true);
+  assert.equal(round.phase, "playing");
+  assert.equal(round.turn, 0);
 });
 
 test("double sir collects the pool only for the same player's consecutive wins", () => {
@@ -97,11 +96,13 @@ test("double sir collects the pool only for the same player's consecutive wins",
   forceTrick(0);
   assert.deepEqual(round.tricks, [0, 0]);
   assert.equal(round.pool, 1);
+  assert.deepEqual(round.collectedBySeat, [1, 0, 0, 0]);
   forceTrick(2);
   assert.deepEqual(round.tricks, [0, 0]);
   forceTrick(2);
   assert.deepEqual(round.tricks, [3, 0]);
   assert.equal(round.pool, 0);
+  assert.deepEqual(round.collectedBySeat, [1, 0, 2, 0]);
 });
 
 test("hidden sir keeps selected trump secret until a valid reveal", () => {

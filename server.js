@@ -70,6 +70,7 @@ function roomView(room, viewer) {
       trick: round.trick,
       tricks: round.tricks,
       capturedBySeat: round.capturedBySeat,
+      collectedBySeat: round.collectedBySeat,
       pool: round.pool,
       winner: round.winner,
       court: round.court,

@@ -10,6 +10,8 @@ let state = null;
 let previousState = null;
 let previousHandIds = new Set();
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
+let lastCollectedWinner = null;
+let captureStreak = 0;
 
 function emit(event, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -116,13 +118,13 @@ function renderSeats() {
     const element = $(`#seat-${position}`);
     const isTurn = state.round?.turn === absolute && state.round?.phase === "playing";
     const remaining = state.round?.handCounts[absolute] || 0;
-    const captured = state.round?.capturedBySeat?.[absolute] || 0;
-    const capturedChanged = captured > (previousState?.round?.capturedBySeat?.[absolute] || 0);
+    const collected = state.round?.collectedBySeat?.[absolute] || 0;
+    const collectedChanged = collected > (previousState?.round?.collectedBySeat?.[absolute] || 0);
     const cardBacks = state.round && absolute !== perspectiveSeat() && remaining
       ? `<div class="seat-cards ${isNewDeal ? "dealt" : ""}" aria-label="${remaining} cards remaining"><i></i><i></i><i></i><span>${remaining}</span></div>`
       : "";
-    const pile = captured
-      ? `<div class="captured-pile ${capturedChanged ? "new-capture" : ""}" title="${captured} captured trick${captured === 1 ? "" : "s"}"><i></i><i></i><span>${captured}</span></div>`
+    const pile = collected
+      ? `<div class="captured-pile ${collectedChanged ? "new-capture" : ""}" title="${collected} won trick${collected === 1 ? "" : "s"}"><i></i><i></i><span>${collected}</span></div>`
       : "";
     element.className = `seat seat-${["bottom", "left", "top", "right"][position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""}`;
     element.innerHTML = player
@@ -156,11 +158,10 @@ function renderHand() {
     const dealt = !previousHandIds.has(card.id);
     return cardHtml(card, { playable, disabled: !playable, rotate, arc, dealt });
   }).join("");
-  const cardWidth = Math.min(Math.max(window.innerWidth * 0.18, 60), 82);
-  const available = Math.min(window.innerWidth - 28, 760);
-  const step = sorted.length > 1 ? Math.min(cardWidth, (available - cardWidth) / (sorted.length - 1)) : cardWidth;
-  hand.style.setProperty("--hand-overlap", `${step - cardWidth}px`);
-  hand.style.width = `${cardWidth + Math.max(0, sorted.length - 1) * step}px`;
+  // Keep each card readable. On a phone the hand scrolls horizontally rather
+  // than squeezing thirteen cards into a few pixels each.
+  hand.style.width = "100%";
+  hand.style.maxWidth = "760px";
   hand.querySelectorAll(".card").forEach((card, index) => {
     card.style.zIndex = index + 1;
     if (card.classList.contains("dealt")) card.style.animationDelay = `${index * 45}ms`;
@@ -264,6 +265,36 @@ function renderStatus() {
   $("#status").textContent = text;
 }
 
+function renderStreakEffect() {
+  const round = state?.round;
+  const effect = $("#streak-effect");
+  const isNewRound = !previousState?.round || previousState.round.dealer !== round?.dealer;
+  if (!round || isNewRound) {
+    lastCollectedWinner = null;
+    captureStreak = 0;
+    effect.className = "streak-effect";
+    return;
+  }
+  const winner = round.collectedBySeat?.findIndex((count, seat) => count > (previousState.round.collectedBySeat?.[seat] || 0));
+  if (winner < 0) return;
+  captureStreak = winner === lastCollectedWinner ? captureStreak + 1 : 1;
+  lastCollectedWinner = winner;
+  const effectType = captureStreak >= 3 ? "fire" : captureStreak === 2 ? "thunder" : "spark";
+  const relative = relativeSeat(winner);
+  const positions = [["50%", "73%"], ["25%", "50%"], ["50%", "27%"], ["75%", "50%"]];
+  effect.className = "streak-effect";
+  effect.style.setProperty("--effect-x", positions[relative][0]);
+  effect.style.setProperty("--effect-y", positions[relative][1]);
+  void effect.offsetWidth;
+  const name = state.players[winner]?.name || "Player";
+  effect.textContent = effectType === "spark"
+    ? `✨ ${name} wins the trick`
+    : effectType === "thunder"
+      ? `⚡ ${name} · 2 trick streak`
+      : `🔥 ${name} is on fire · ${captureStreak} in a row`;
+  effect.classList.add("show", effectType);
+}
+
 function render() {
   home.classList.add("hidden");
   game.classList.remove("hidden");
@@ -297,6 +328,7 @@ function render() {
   renderPanels();
   renderStatus();
   renderTimer();
+  renderStreakEffect();
 }
 
 socket.on("room_state", (nextState) => {
