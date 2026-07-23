@@ -8,6 +8,7 @@ const symbols = { clubs: "♣", diamonds: "♦", hearts: "♥", spades: "♠" };
 const suitOrder = { clubs: 0, diamonds: 1, hearts: 2, spades: 3 };
 let state = null;
 let previousState = null;
+let previousHandIds = new Set();
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
 
 function emit(event, payload = {}) {
@@ -84,8 +85,14 @@ function toast(message) {
 
 function cardHtml(card, options = {}) {
   const red = card.suit === "hearts" || card.suit === "diamonds";
-  return `<button class="card ${red ? "red" : ""} ${options.playable ? "playable" : ""}" ${options.disabled ? "disabled" : ""} data-card="${card.id}" ${options.seat === undefined ? "" : `data-seat="${options.seat}"`} ${options.owner ? `data-owner="${options.owner}"` : ""}>
-    <span>${card.rank}<br>${symbols[card.suit]}</span><span class="center-suit">${symbols[card.suit]}</span>
+  const style = [
+    options.rotate !== undefined ? `--card-rotate:${options.rotate}deg` : "",
+    options.arc !== undefined ? `--card-arc:${options.arc}px` : ""
+  ].filter(Boolean).join(";");
+  return `<button class="card ${red ? "red" : ""} ${options.playable ? "playable" : ""} ${options.dealt ? "dealt" : ""}" ${options.disabled ? "disabled" : ""} data-card="${card.id}" ${options.seat === undefined ? "" : `data-seat="${options.seat}"`} ${options.owner ? `data-owner="${options.owner}"` : ""} ${style ? `style="${style}"` : ""}>
+    <span class="corner corner-top">${card.rank}<span class="corner-suit">${symbols[card.suit]}</span></span>
+    <span class="pip">${symbols[card.suit]}</span>
+    <span class="corner corner-bottom">${card.rank}<span class="corner-suit">${symbols[card.suit]}</span></span>
   </button>`;
 }
 
@@ -127,7 +134,7 @@ function renderHand() {
   const hand = $("#hand");
   const round = state.round;
   const label = $("#hand-label");
-  if (!round?.hand?.length) { hand.innerHTML = ""; label.classList.add("hidden"); return; }
+  if (!round?.hand?.length) { hand.innerHTML = ""; label.classList.add("hidden"); previousHandIds = new Set(); return; }
   label.classList.remove("hidden");
   const owner = state.players[perspectiveSeat()]?.name || "Player";
   label.textContent = isSpectator()
@@ -136,18 +143,28 @@ function renderHand() {
   const leadSuit = round.trick[0]?.card.suit;
   const hasLead = leadSuit && round.hand.some((card) => card.suit === leadSuit);
   const sorted = [...round.hand].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || a.value - b.value);
-  hand.innerHTML = sorted.map((card) => {
+  const mid = (sorted.length - 1) / 2;
+  const angleStep = sorted.length > 1 ? Math.min(3.2, 26 / (sorted.length - 1)) : 0;
+  hand.innerHTML = sorted.map((card, index) => {
     const legal = round.phase !== "playing" || !leadSuit || card.suit === leadSuit || !hasLead;
     const hiddenChoice = !isSpectator() && round.phase === "choosing_trump" && round.mode === "hidden" && round.caller === state.you.seat;
     const playable = !isSpectator() && (hiddenChoice || (round.phase === "playing" && round.turn === state.you.seat && legal));
-    return cardHtml(card, { playable, disabled: !playable });
+    const offset = index - mid;
+    const rotate = Math.round(offset * angleStep * 10) / 10;
+    const arc = Math.round(Math.abs(offset) * Math.abs(offset) * 0.6);
+    const dealt = !previousHandIds.has(card.id);
+    return cardHtml(card, { playable, disabled: !playable, rotate, arc, dealt });
   }).join("");
   const cardWidth = Math.min(Math.max(window.innerWidth * 0.18, 60), 82);
   const available = Math.min(window.innerWidth - 28, 760);
   const step = sorted.length > 1 ? Math.min(cardWidth, (available - cardWidth) / (sorted.length - 1)) : cardWidth;
   hand.style.setProperty("--hand-overlap", `${step - cardWidth}px`);
   hand.style.width = `${cardWidth + Math.max(0, sorted.length - 1) * step}px`;
-  hand.querySelectorAll(".card").forEach((card, index) => { card.style.zIndex = index + 1; });
+  hand.querySelectorAll(".card").forEach((card, index) => {
+    card.style.zIndex = index + 1;
+    if (card.classList.contains("dealt")) card.style.animationDelay = `${index * 45}ms`;
+  });
+  previousHandIds = new Set(sorted.map((card) => card.id));
   hand.querySelectorAll("[data-card]").forEach((card) => card.addEventListener("click", () => {
     card.blur();
     requestAnimationFrame(() => window.scrollTo(0, 0));
