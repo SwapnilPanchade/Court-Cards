@@ -28,6 +28,15 @@ function cleanName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").replace(/[<>&"']/g, "").slice(0, 18);
 }
 
+function makeBot(seat) {
+  const titles = ["Ace", "Queen", "King", "Jack"];
+  return { name: `${titles[seat]} Bot`, token: `bot-${crypto.randomUUID()}`, socketId: null, bot: true };
+}
+
+function isBot(room, seat) {
+  return Boolean(room.players[seat]?.bot);
+}
+
 function roomView(room, viewer) {
   const round = room.round;
   const isPlayer = viewer.role === "player";
@@ -46,7 +55,7 @@ function roomView(room, viewer) {
       ? { role: "player", seat: viewerSeat, token: player.token }
       : { role: "spectator", token: viewer.spectator.token, name: viewer.spectator.name, watchingSeat: viewerSeat },
     players: room.players.map((item, seat) =>
-      item ? { seat, name: item.name, connected: Boolean(item.socketId), team: teamForSeat(seat) } : null
+      item ? { seat, name: item.name, connected: Boolean(item.socketId) || Boolean(item.bot), bot: Boolean(item.bot), team: teamForSeat(seat) } : null
     ),
     score: room.score,
     matchTarget: room.matchTarget,
@@ -122,6 +131,7 @@ function scheduleTurn(room) {
   const round = room.round;
   if (!round || round.phase !== "playing" || round.turn === null) return;
   const expectedSeat = round.turn;
+  if (isBot(room, expectedSeat)) return scheduleBotAction(room);
   round.turnDeadline = Date.now() + TURN_TIMEOUT_MS;
   room.turnTimer = setTimeout(() => {
     room.turnTimer = null;
@@ -141,6 +151,50 @@ function scheduleTurn(room) {
     else scheduleTurn(room);
     sendRoom(room);
   }, TURN_TIMEOUT_MS);
+}
+
+function botTrump(round, seat) {
+  const cards = round.hands[seat].slice(0, 5);
+  return SUITS.reduce((best, suit) => cards.filter((card) => card.suit === suit).length > cards.filter((card) => card.suit === best).length ? suit : best, SUITS[0]);
+}
+
+function botPlay(round, seat) {
+  const hand = round.hands[seat];
+  const leadSuit = round.trick[0]?.card.suit;
+  let legal = leadSuit ? hand.filter((card) => card.suit === leadSuit) : hand;
+  if (!legal.length) legal = hand;
+  if (round.mustTrumpSeat === seat) {
+    const trumps = hand.filter((card) => card.suit === round.trump);
+    if (trumps.length) legal = trumps;
+  }
+  return legal.slice().sort((a, b) => a.value - b.value)[0];
+}
+
+function scheduleBotAction(room) {
+  clearTurnTimer(room);
+  const round = room.round;
+  if (!round) return;
+  const botSeat = round.phase === "choosing_trump" ? round.caller : round.phase === "playing" ? round.turn : null;
+  if (botSeat === null || !isBot(room, botSeat)) return;
+  room.turnTimer = setTimeout(() => {
+    room.turnTimer = null;
+    if (room.round !== round || !isBot(room, botSeat)) return;
+    if (round.phase === "choosing_trump" && round.caller === botSeat) {
+      if (round.mode === "hidden") chooseHiddenTrump(round, botSeat, round.hands[botSeat][0].id);
+      else chooseTrump(round, botSeat, botTrump(round, botSeat));
+      room.updatedAt = Date.now();
+      scheduleTurn(room);
+      sendRoom(room);
+      return;
+    }
+    if (round.phase !== "playing" || round.turn !== botSeat) return;
+    const card = botPlay(round, botSeat);
+    playCard(round, botSeat, card.id);
+    room.updatedAt = Date.now();
+    if (round.phase === "trick_complete") scheduleCollection(room, round);
+    else scheduleTurn(room);
+    sendRoom(room);
+  }, 650);
 }
 
 function leaveCurrentSocket(socket) {
@@ -211,6 +265,7 @@ io.on("connection", (socket) => {
       if (seat < 0) {
         if (room.round) throw new Error("This game has already started.");
         seat = room.players.findIndex((item) => !item);
+        if (seat < 0 && !room.round) seat = room.players.findIndex((item) => item?.bot);
         if (seat < 0) throw new Error("This room is full.");
         const playerName = cleanName(name);
         if (!playerName) throw new Error("Enter your name.");
@@ -278,9 +333,24 @@ io.on("connection", (socket) => {
       room.updatedAt = Date.now();
       ack({ ok: true });
       sendRoom(room);
+      scheduleBotAction(room);
     } catch (error) {
       ackError(ack, error);
     }
+  });
+
+  socket.on("fill_bots", (_payload, ack) => {
+    try {
+      const seat = playerSeat(socket);
+      const room = rooms.get(socket.data.roomCode);
+      if (!room) throw new Error("Join a room first.");
+      if (seat !== room.hostSeat) throw new Error("Only the host can add bots.");
+      if (room.round) throw new Error("Bots can only be added before the game starts.");
+      room.players = room.players.map((player, index) => player || makeBot(index));
+      room.updatedAt = Date.now();
+      ack({ ok: true });
+      sendRoom(room);
+    } catch (error) { ackError(ack, error); }
   });
 
   socket.on("update_settings", ({ deckSize, mode } = {}, ack) => {
@@ -324,6 +394,7 @@ io.on("connection", (socket) => {
       room.updatedAt = Date.now();
       ack({ ok: true });
       sendRoom(room);
+      scheduleBotAction(room);
     } catch (error) { ackError(ack, error); }
   });
 
@@ -383,6 +454,7 @@ io.on("connection", (socket) => {
       room.updatedAt = Date.now();
       ack({ ok: true });
       sendRoom(room);
+      scheduleBotAction(room);
     } catch (error) {
       ackError(ack, error);
     }
@@ -402,6 +474,7 @@ io.on("connection", (socket) => {
       room.updatedAt = Date.now();
       ack({ ok: true });
       sendRoom(room);
+      scheduleBotAction(room);
     } catch (error) { ackError(ack, error); }
   });
 
@@ -412,6 +485,9 @@ io.on("connection", (socket) => {
       if (!room?.round) throw new Error("Start a game first.");
       if (room.restartVote) throw new Error("A restart vote is already active.");
       room.restartVote = { requesterSeat: seat, approvals: [seat] };
+      room.players.forEach((player, index) => {
+        if (player?.bot && !room.restartVote.approvals.includes(index)) room.restartVote.approvals.push(index);
+      });
       ack({ ok: true });
       sendRoom(room);
     } catch (error) { ackError(ack, error); }
@@ -439,6 +515,7 @@ io.on("connection", (socket) => {
       }
       ack({ ok: true });
       sendRoom(room);
+      scheduleBotAction(room);
     } catch (error) { ackError(ack, error); }
   });
 

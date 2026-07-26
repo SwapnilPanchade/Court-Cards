@@ -10,8 +10,6 @@ let state = null;
 let previousState = null;
 let previousHandIds = new Set();
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
-let lastCollectedWinner = null;
-let captureStreak = 0;
 
 function emit(event, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -47,6 +45,9 @@ $("#spectate-button").addEventListener("click", () => enterRoom("spectator"));
 $("#room-code").addEventListener("keydown", (event) => { if (event.key === "Enter") enterRoom("join"); });
 
 $("#start-button").addEventListener("click", () => emit("start_game").catch((error) => setError(gameError, error)));
+$("#fill-bots-button").addEventListener("click", () => emit("fill_bots")
+  .then(() => toast("Empty seats filled with bots"))
+  .catch((error) => setError(gameError, error)));
 $("#next-button").addEventListener("click", () => emit(state.matchWinner === null ? "next_round" : "restart_match").catch((error) => setError(gameError, error)));
 $("#pass-button").addEventListener("click", () => emit("pass_trump").catch((error) => setError(gameError, error)));
 $("#reveal-button").addEventListener("click", () => emit("reveal_trump").catch((error) => setError(gameError, error)));
@@ -128,7 +129,7 @@ function renderSeats() {
       : "";
     element.className = `seat seat-${["bottom", "left", "top", "right"][position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""}`;
     element.innerHTML = player
-      ? `${pile}<div class="avatar">${player.name[0].toUpperCase()}</div><div>${player.name}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</div><div class="team">Team ${player.team ? "B" : "A"}</div>${cardBacks}`
+      ? `${pile}<div class="avatar ${player.bot ? "bot-avatar" : ""}">${player.bot ? "♟" : player.name[0].toUpperCase()}</div><div>${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</div><div class="team">Team ${player.team ? "B" : "A"}</div>${cardBacks}`
       : `<div class="avatar">+</div><div>Empty seat</div>`;
   }
 }
@@ -198,8 +199,10 @@ function renderPanels() {
     const count = state.players.filter(Boolean).length;
     $("#start-button").classList.toggle("hidden", state.you.seat !== state.hostSeat);
     $("#start-button").disabled = count !== 4;
-    $("#lobby-note").textContent = `${count}/4 players joined${state.you.seat === state.hostSeat ? " — you are the host" : ""}`;
+    const botCount = state.players.filter((player) => player?.bot).length;
+    $("#lobby-note").textContent = `${count}/4 seats ready${botCount ? ` · ${botCount} bot${botCount > 1 ? "s" : ""}` : ""}${state.you.seat === state.hostSeat ? " — you are the host" : ""}`;
     const host = state.you.seat === state.hostSeat;
+    $("#fill-bots-button").classList.toggle("hidden", !host || count === 4);
     const deckSelect = $("#deck-size");
     deckSelect.innerHTML = state.options.deckSizes.map((size) => `<option value="${size}" ${size === state.settings.deckSize ? "selected" : ""}>${size} cards · ${size / 4} each</option>`).join("");
     $("#game-mode").value = state.settings.mode;
@@ -265,34 +268,27 @@ function renderStatus() {
   $("#status").textContent = text;
 }
 
-function renderStreakEffect() {
-  const round = state?.round;
-  const effect = $("#streak-effect");
-  const isNewRound = !previousState?.round || previousState.round.dealer !== round?.dealer;
-  if (!round || isNewRound) {
-    lastCollectedWinner = null;
-    captureStreak = 0;
-    effect.className = "streak-effect";
-    return;
+function runGameMotion() {
+  if (!previousState?.round || !state?.round) return;
+  const oldTrick = new Set((previousState.round.trick || []).map((play) => play.card.id));
+  const newlyPlayed = (state.round.trick || []).find((play) => !oldTrick.has(play.card.id));
+  if (newlyPlayed && window.gsap) {
+    const card = document.querySelector(`.played-card[data-card="${newlyPlayed.card.id}"]`);
+    if (card) gsap.fromTo(card, { scale: 0.42, rotation: newlyPlayed.seat % 2 ? -18 : 18, filter: "brightness(1.75)" }, { scale: 1, rotation: 0, filter: "brightness(1)", duration: 0.46, ease: "back.out(2)" });
   }
-  const winner = round.collectedBySeat?.findIndex((count, seat) => count > (previousState.round.collectedBySeat?.[seat] || 0));
+  const winner = state.round.collectedBySeat?.findIndex((count, seat) => count > (previousState.round.collectedBySeat?.[seat] || 0));
   if (winner < 0) return;
-  captureStreak = winner === lastCollectedWinner ? captureStreak + 1 : 1;
-  lastCollectedWinner = winner;
-  const effectType = captureStreak >= 3 ? "fire" : captureStreak === 2 ? "thunder" : "spark";
-  const relative = relativeSeat(winner);
-  const positions = [["50%", "73%"], ["25%", "50%"], ["50%", "27%"], ["75%", "50%"]];
-  effect.className = "streak-effect";
-  effect.style.setProperty("--effect-x", positions[relative][0]);
-  effect.style.setProperty("--effect-y", positions[relative][1]);
-  void effect.offsetWidth;
   const name = state.players[winner]?.name || "Player";
-  effect.textContent = effectType === "spark"
-    ? `✨ ${name} wins the trick`
-    : effectType === "thunder"
-      ? `⚡ ${name} · 2 trick streak`
-      : `🔥 ${name} is on fire · ${captureStreak} in a row`;
-  effect.classList.add("show", effectType);
+  const layer = $("#motion-layer");
+  layer.innerHTML = `<div class="capture-callout">${name}<span>TRICK TAKEN</span></div>`;
+  const callout = layer.firstElementChild;
+  if (window.gsap) gsap.fromTo(callout, { y: 18, scale: 0.72, autoAlpha: 0 }, { y: -22, scale: 1, autoAlpha: 1, duration: 0.35, ease: "back.out(2)", onComplete: () => gsap.to(callout, { autoAlpha: 0, y: -42, duration: 0.45, delay: 0.55 }) });
+  if (window.confetti) {
+    const table = document.querySelector(".table").getBoundingClientRect();
+    const relative = relativeSeat(winner);
+    const points = [[.5, .72], [.2, .5], [.5, .25], [.8, .5]];
+    confetti({ particleCount: 38, spread: 54, startVelocity: 20, scalar: .75, colors: ["#ffe36b", "#f6b83d", "#fff5cf", "#63e6be"], origin: { x: (table.left + table.width * points[relative][0]) / innerWidth, y: (table.top + table.height * points[relative][1]) / innerHeight } });
+  }
 }
 
 function render() {
@@ -328,7 +324,7 @@ function render() {
   renderPanels();
   renderStatus();
   renderTimer();
-  renderStreakEffect();
+  runGameMotion();
 }
 
 socket.on("room_state", (nextState) => {

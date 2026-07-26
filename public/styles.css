@@ -319,3 +319,33 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .trump-panel { left: auto; right: 12px; top: 50%; bottom: auto; transform: translateY(-50%); max-height: 90vh; }
   .reveal-button { bottom: 12px; left: 12px; transform: none; }
 }
+
+/* v2 table language: physical card-table materials, crisp chrome and motion
+   are intentionally reserved for actual game events (GSAP + canvas-confetti). */
+:root { --felt-1: #174f42; --felt-2: #0b342e; --felt-deep: #061d1b; --gold: #f4c24f; --gold-soft: #ffe39a; --surface: #121c27; --surface-2: #1a2a38; --ink: #f6f0df; }
+body { background: #071015; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .22; background-image: linear-gradient(135deg, rgba(255,255,255,.035) 25%, transparent 25%), linear-gradient(315deg, rgba(255,255,255,.025) 25%, transparent 25%); background-size: 7px 7px; }
+.home { background: radial-gradient(circle at 50% -10%, #2f7a67 0, #102b2b 39%, #060d12 100%); }
+.brand-mark { border-radius: 16px; background: linear-gradient(135deg, #ffe196, #d78f26); box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 2px 1px rgba(255,255,255,.65); transform: rotate(-7deg) !important; }
+.join-card, .panel { background: linear-gradient(145deg, rgba(29,43,55,.96), rgba(10,18,25,.96)); border: 1px solid rgba(255,222,145,.2); box-shadow: 0 20px 55px rgba(0,0,0,.36), inset 0 1px rgba(255,255,255,.07); backdrop-filter: blur(14px); }
+.primary { background: linear-gradient(180deg, #ffd971, #e8a72c); color: #231807; box-shadow: 0 5px 0 #9b6515, 0 12px 24px rgba(0,0,0,.25); transform: translateY(0); }
+.primary:active { transform: translateY(4px); box-shadow: 0 1px 0 #9b6515; }
+.secondary, .bot-button { background: rgba(255,255,255,.04); border: 1px solid rgba(255,226,149,.25); }
+.bot-button { color: #8ff0cf; border-color: rgba(108,231,191,.42); }
+.table { overflow: hidden; border-radius: 48% 48% 46% 46%; background: radial-gradient(ellipse at 50% 8%, rgba(255,255,255,.13), transparent 35%), repeating-radial-gradient(ellipse at center, transparent 0 3px, rgba(255,255,255,.018) 4px 5px), radial-gradient(ellipse at 50% 50%, var(--felt-1), var(--felt-2) 52%, var(--felt-deep)); box-shadow: 0 0 0 2px #e6b84d, 0 0 0 8px #553c1d, 0 0 0 12px #17232a, 0 30px 70px rgba(0,0,0,.58), inset 0 0 60px rgba(0,0,0,.42), inset 0 2px rgba(255,255,255,.1); }
+.table::before { content: "COURT PIECE"; position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%) rotate(-8deg); color: rgba(255,240,189,.06); font: 700 clamp(24px, 6vw, 48px)/1 Fraunces, serif; letter-spacing: .14em; white-space: nowrap; pointer-events: none; }
+.seat { font-weight: 700; text-shadow: 0 2px 5px #00130e; }
+.avatar { width: 38px; height: 38px; background: linear-gradient(145deg, #314756, #162630); border: 2px solid rgba(255,255,255,.12); box-shadow: 0 4px 0 #071115, 0 10px 18px rgba(0,0,0,.34); }
+.bot-avatar { color: #8ff0cf; border-color: rgba(108,231,191,.55); }
+.bot-tag { display: inline-block; margin-left: 3px; padding: 1px 4px; border: 1px solid rgba(108,231,191,.42); border-radius: 5px; color: #8ff0cf; font-size: 7px; letter-spacing: .09em; vertical-align: 1px; }
+.seat.active .avatar { animation: turnBeacon 1.15s ease-in-out infinite alternate; }
+.hand .card { border: 1px solid #fff; box-shadow: 0 5px 0 #aeb3b7, 0 10px 20px rgba(0,0,0,.5); }
+.hand .card.playable { cursor: pointer; }
+.hand .card.playable::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 42%, rgba(255,255,255,.55), transparent 58%); transform: translateX(-140%); transition: transform .35s ease; }
+.hand .card.playable:hover::after, .hand .card.playable:focus::after { transform: translateX(140%); }
+.played-card { box-shadow: 0 5px 0 #b4b4ae, 0 12px 22px rgba(0,0,0,.48) !important; }
+.motion-layer { position: absolute; inset: 0; z-index: 15; display: grid; place-items: center; pointer-events: none; }
+.capture-callout { opacity: 0; padding: 9px 14px; border: 1px solid rgba(255,238,181,.8); border-radius: 11px; background: rgba(5,18,19,.9); box-shadow: 0 10px 25px rgba(0,0,0,.45); color: #fff3bb; font: 700 16px/1 Fraunces, serif; text-align: center; letter-spacing: .03em; }
+.capture-callout span { display: block; margin-top: 4px; color: #8ff0cf; font: 700 8px/1.1 "DM Sans", sans-serif; letter-spacing: .18em; }
+@keyframes turnBeacon { from { box-shadow: 0 4px 0 #071115, 0 0 0 0 rgba(244,194,79,.55), 0 10px 18px rgba(0,0,0,.34); } to { box-shadow: 0 4px 0 #071115, 0 0 0 7px rgba(244,194,79,0), 0 10px 18px rgba(0,0,0,.34); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
