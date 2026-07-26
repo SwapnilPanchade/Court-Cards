@@ -805,14 +805,10 @@ function renderPanels() {
     result.classList.remove("hidden");
     const won = !isSpectator() && state.round.winner === state.players[state.you.seat].team;
     const matchDone = state.matchWinner !== null;
-    const wonTricks = state.round.wonTricks || state.round.tricks;
-    const sirScore = state.round.mode === "single"
-      ? ""
-      : ` · Round score ${state.round.tricks[0]}–${state.round.tricks[1]}`;
     const contract = state.round.bidState?.contractBid
       ? `<br><span class="contract-result ${state.round.bidState.contractMade ? "made" : "failed"}">Team ${state.round.bidState.contractTeam ? "B" : "A"} contract ${state.round.bidState.contractBid} · ${state.round.bidState.contractMade ? "MADE" : "FAILED"}</span>`
       : "";
-    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Won tricks ${wonTricks[0]}–${wonTricks[1]}${sirScore} · Match ${state.score[0]}–${state.score[1]}${contract}`;
+    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Hands ${state.round.tricks[0]}–${state.round.tricks[1]} · Match ${state.score[0]}–${state.score[1]}${contract}`;
     $("#next-button").classList.toggle("hidden", isSpectator() || state.you.seat !== state.hostSeat);
     $("#next-button").textContent = matchDone ? "Start new match" : "Deal next round";
   }
@@ -860,7 +856,9 @@ function renderStatus() {
       : `${decider?.name || "Original caller"} decides on ${bidder?.name || "the highest bidder"}'s bid`;
   }
   if (round?.phase === "choosing_trump") text = !isSpectator() && round.caller === state.you.seat ? "Choose the hukum" : `${state.players[round.caller].name} is choosing hukum`;
-  if (round?.phase === "playing") text = `${round.mode === "double" ? `Double Sir · ${round.pool} pooled · ` : round.mode === "hidden" ? `Hidden Sir · ${round.pool} pooled · ` : ""}${!isSpectator() && round.turn === state.you.seat ? "Your turn" : `${state.players[round.turn].name}'s turn`}`;
+  if (round?.phase === "playing") text = !isSpectator() && round.turn === state.you.seat
+    ? "Your turn"
+    : `${state.players[round.turn].name}'s turn`;
   if (round?.phase === "trick_complete") text = `${state.players[round.pendingWinner].name} won the trick`;
   if (round?.phase === "round_over") text = "Round complete";
   $("#status").textContent = text;
@@ -977,14 +975,8 @@ function render() {
   const dealScore = $("#deal-score");
   dealScore.classList.toggle("hidden", !state.round || ["choosing_trump", "bidding", "auction_decision"].includes(state.round.phase));
   if (state.round) {
-    const wonTricks = state.round.wonTricks || state.round.tricks;
-    const sirScore = state.round.mode === "single"
-      ? ""
-      : `  ·  ROUND ${state.round.tricks[0]}–${state.round.tricks[1]}`;
-    dealScore.textContent = `WON  A ${wonTricks[0]}  ·  ${wonTricks[1]} B${sirScore}`;
-    dealScore.title = state.round.mode === "single"
-      ? "Completed tricks won by each team"
-      : "WON counts raw trick wins; ROUND counts secured Double/Hidden Sir bundles";
+    dealScore.textContent = `HANDS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`;
+    dealScore.removeAttribute("title");
   }
   $("#center-deck").classList.toggle("hidden", !state.round);
   const spectatorBar = $("#spectator-bar");

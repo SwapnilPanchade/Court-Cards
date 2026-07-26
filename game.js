@@ -30,14 +30,6 @@ function teamForSeat(seat) {
   return seat % 2;
 }
 
-// Raw completed-trick wins. In Double/Hidden Sir this intentionally differs
-// from `round.tricks`, which only counts bundles after the Sir condition lands.
-function wonTricksByTeam(round) {
-  const collected = round?.collectedBySeat;
-  if (!Array.isArray(collected) || collected.length !== 4) throw new Error("Round trick collections are invalid.");
-  return [collected[0] + collected[2], collected[1] + collected[3]];
-}
-
 function canPlayCard(hand, card, leadSuit) {
   if (!card || !hand.some((item) => item.id === card.id)) return false;
   if (!leadSuit || card.suit === leadSuit) return true;
@@ -101,13 +93,8 @@ function createRound(dealer, settings = {}, random = Math.random) {
     trick: [],
     completedTricks: [],
     tricks: [0, 0],
-    capturedBySeat: [0, 0, 0, 0],
-    // Every completed trick is shown in the winner's on-table bundle. This is
-    // deliberately separate from `capturedBySeat`, which is the scored bundle
-    // in Sir modes and can stay at zero while a pool is still pending.
+    // Per-seat raw trick wins for the table piles. Team totals live in `tricks`.
     collectedBySeat: [0, 0, 0, 0],
-    pool: 0,
-    lastTrickWinner: null,
     passedBy: [],
     pendingWinner: null,
     winner: null,
@@ -282,55 +269,33 @@ function collectTrick(round) {
   const winnerSeat = round.pendingWinner;
   const winner = round.trick.find((play) => play.seat === winnerSeat);
   if (!winner) throw new Error("Trick winner is missing.");
-    const team = teamForSeat(winner.seat);
-    round.collectedBySeat[winner.seat] += 1;
-    round.pool += 1;
+  const team = teamForSeat(winner.seat);
+  round.collectedBySeat[winner.seat] += 1;
+  round.tricks[team] += 1;
 
-    if (round.mode === "single") {
-      round.tricks[team] += 1;
-      round.capturedBySeat[winner.seat] += 1;
-      round.pool = 0;
-    } else if (round.lastTrickWinner === winner.seat) {
-      round.tricks[team] += round.pool;
-      round.capturedBySeat[winner.seat] += round.pool;
-      round.pool = 0;
-      round.lastTrickWinner = null;
+  round.completedTricks.push({ plays: round.trick, winner: winner.seat });
+  round.trick = [];
+  round.pendingWinner = null;
+  round.turn = winner.seat;
+  round.phase = "playing";
+  round.trumpEffectiveFrom = round.trumpRevealed ? 0 : Infinity;
+
+  const isLastTrick = round.completedTricks.length === round.cardsPerPlayer;
+  // Finish the deal only after every card has been played. A majority can
+  // decide the eventual winner, but cutting the deal short hides cards and
+  // makes the final trick bundles confusing for the table.
+  if (isLastTrick) {
+    round.phase = "round_over";
+    if (round.auctionMode && round.bidState?.contractTeam !== null) {
+      round.bidState.contractMade = round.tricks[round.bidState.contractTeam] >= round.bidState.contractBid;
+      round.winner = round.bidState.contractMade ? round.bidState.contractTeam : 1 - round.bidState.contractTeam;
     } else {
-      round.lastTrickWinner = winner.seat;
+      const callerTeam = teamForSeat(round.caller);
+      const callerMadeMajority = round.tricks[callerTeam] > round.cardsPerPlayer / 2;
+      round.winner = callerMadeMajority ? callerTeam : 1 - callerTeam;
     }
-
-    round.completedTricks.push({ plays: round.trick, winner: winner.seat });
-    round.trick = [];
-    round.pendingWinner = null;
-    round.turn = winner.seat;
-    round.phase = "playing";
-    round.trumpEffectiveFrom = round.trumpRevealed ? 0 : Infinity;
-
-    const isLastTrick = round.completedTricks.length === round.cardsPerPlayer;
-    if (isLastTrick && round.pool > 0) {
-      round.tricks[team] += round.pool;
-      round.capturedBySeat[winner.seat] += round.pool;
-      round.pool = 0;
-    }
-
-    // Finish the deal only after every card has been played. A majority can
-    // decide the eventual winner, but cutting the deal short hides cards and
-    // makes the final trick bundles confusing for the table.
-    const shouldEnd = isLastTrick;
-    if (shouldEnd) {
-      round.phase = "round_over";
-      if (round.auctionMode && round.bidState?.contractTeam !== null) {
-        round.bidState.contractMade = round.tricks[round.bidState.contractTeam] >= round.bidState.contractBid;
-        round.winner = round.bidState.contractMade ? round.bidState.contractTeam : 1 - round.bidState.contractTeam;
-      } else {
-        const callerTeam = teamForSeat(round.caller);
-        const callerMadeMajority = round.tricks[callerTeam] > round.cardsPerPlayer / 2;
-        round.winner = callerMadeMajority ? callerTeam : 1 - callerTeam;
-      }
-      round.court = round.mode === "single"
-        ? round.tricks[1 - round.winner] === 0
-        : round.tricks[round.winner] === round.cardsPerPlayer;
-    }
+    round.court = round.tricks[1 - round.winner] === 0;
+  }
   return round;
 }
 
@@ -343,7 +308,6 @@ module.exports = {
   shuffle,
   dealHands,
   teamForSeat,
-  wonTricksByTeam,
   canPlayCard,
   winningPlay,
   createRound,

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick, wonTricksByTeam } = require("../game");
+const { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } = require("../game");
 const { TABLE_THEMES, AVATAR_IDS, roomView, updateRoomSettings, chooseRoomTeam, chooseRoomAvatar, recordRoundResult, assertMatchOpen } = require("../server");
 
 const card = (rank, suit, value) => ({ id: `${rank}-${suit}`, rank, suit, value });
@@ -56,7 +56,7 @@ test("caller can pass hukum to the next player but the fourth caller must choose
 
 test("winner of a completed trick leads next", () => {
   const round = {
-    phase: "playing", mode: "single", cardsPerPlayer: 1, trump: "spades", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [0, 0], capturedBySeat: [0, 0, 0, 0], collectedBySeat: [0, 0, 0, 0], pool: 0, lastTrickWinner: null, pendingWinner: null,
+    phase: "playing", mode: "single", cardsPerPlayer: 1, trump: "spades", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [0, 0], collectedBySeat: [0, 0, 0, 0], pendingWinner: null,
     hands: [[card("A", "hearts", 12)], [card("2", "hearts", 0)], [card("K", "hearts", 11)], [card("3", "hearts", 1)]]
   };
   playCard(round, 0, "A-hearts");
@@ -68,12 +68,12 @@ test("winner of a completed trick leads next", () => {
   collectTrick(round);
   assert.equal(round.turn, 0);
   assert.deepEqual(round.tricks, [1, 0]);
-  assert.deepEqual(round.capturedBySeat, [1, 0, 0, 0]);
+  assert.deepEqual(round.collectedBySeat, [1, 0, 0, 0]);
 });
 
-test("single sir keeps playing after a majority until every card is played", () => {
+test("deal keeps playing after a majority until every card is played", () => {
   const round = {
-    phase: "playing", mode: "single", cardsPerPlayer: 13, trump: "clubs", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [6, 0], capturedBySeat: [6, 0, 0, 0], collectedBySeat: [6, 0, 0, 0], pool: 0, lastTrickWinner: null, pendingWinner: null,
+    phase: "playing", mode: "single", cardsPerPlayer: 13, trump: "clubs", trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [], completedTricks: [], tricks: [6, 0], collectedBySeat: [6, 0, 0, 0], pendingWinner: null,
     hands: [[card("A", "hearts", 12)], [card("2", "hearts", 0)], [card("K", "hearts", 11)], [card("3", "hearts", 1)]]
   };
   [0, 1, 2, 3].forEach((seat) => playCard(round, seat, round.hands[seat][0].id));
@@ -82,57 +82,46 @@ test("single sir keeps playing after a majority until every card is played", () 
   assert.equal(round.turn, 0);
 });
 
-test("auction single sir keeps raw won tricks equal to its score through the full deal", () => {
-  const round = createRound(3, { deckSize: 20, mode: "single", auctionMode: true }, () => 0.5);
-  [0, 1, 2, 3].forEach((seat) => passBid(round, seat));
-  chooseTrump(round, round.caller, "clubs");
+test("all modes and auction score every actual team trick through the full deal", () => {
+  ["single", "double", "hidden"].forEach((mode) => {
+    [false, true].forEach((auctionMode) => {
+      const round = createRound(3, { deckSize: 20, mode, auctionMode }, () => 0.5);
+      assert.equal("capturedBySeat" in round, false);
+      assert.equal("pool" in round, false);
+      assert.equal("lastTrickWinner" in round, false);
+      if (auctionMode) [0, 1, 2, 3].forEach((seat) => passBid(round, seat));
+      if (mode === "hidden") chooseHiddenTrump(round, round.caller, round.hands[round.caller][0].id);
+      else chooseTrump(round, round.caller, "clubs");
 
-  const forceTrick = (winnerSeat, trickNumber) => {
-    const leader = round.turn;
-    round.hands = [0, 1, 2, 3].map((seat) => [card(`T${trickNumber}-${seat}`, "hearts", seat === winnerSeat ? 12 : seat)]);
-    [0, 1, 2, 3].forEach((offset) => {
-      const seat = (leader + offset) % 4;
-      playCard(round, seat, round.hands[seat][0].id);
+      const forceTrick = (winnerSeat, trickNumber) => {
+        const leader = round.turn;
+        round.hands = [0, 1, 2, 3].map((seat) => [card(`T${trickNumber}-${seat}`, "hearts", seat === winnerSeat ? 12 : seat)]);
+        [0, 1, 2, 3].forEach((offset) => {
+          const seat = (leader + offset) % 4;
+          playCard(round, seat, round.hands[seat][0].id);
+        });
+        collectTrick(round);
+        const actualTeamWins = [
+          round.collectedBySeat[0] + round.collectedBySeat[2],
+          round.collectedBySeat[1] + round.collectedBySeat[3]
+        ];
+        assert.deepEqual(round.tricks, actualTeamWins, `${mode}, auction=${auctionMode}`);
+      };
+
+      forceTrick(0, 1);
+      forceTrick(1, 2);
+      forceTrick(1, 3);
+      forceTrick(1, 4);
+      assert.equal(round.phase, "playing", "majority must not hide the final cards");
+      forceTrick(1, 5);
+
+      assert.equal(round.phase, "round_over");
+      assert.deepEqual(round.tricks, [1, 4]);
+      assert.equal(round.completedTricks.length, round.cardsPerPlayer);
+      assert.equal(round.winner, 1);
+      if (auctionMode) assert.equal(round.bidState.contractMade, false);
     });
-    collectTrick(round);
-    assert.deepEqual(round.tricks, wonTricksByTeam(round));
-  };
-
-  forceTrick(0, 1);
-  forceTrick(1, 2);
-  forceTrick(1, 3);
-  forceTrick(1, 4);
-  assert.equal(round.phase, "playing", "majority must not hide the final cards");
-  forceTrick(1, 5);
-
-  assert.equal(round.phase, "round_over");
-  assert.deepEqual(round.tricks, [1, 4]);
-  assert.deepEqual(wonTricksByTeam(round), [1, 4]);
-  assert.equal(round.completedTricks.length, round.cardsPerPlayer);
-});
-
-test("double sir collects the pool only for the same player's consecutive wins", () => {
-  const round = createRound(3, { deckSize: 20, mode: "double" }, () => 0.5);
-  round.phase = "playing";
-  round.trump = "clubs";
-  round.trumpRevealed = true;
-  const forceTrick = (winnerSeat) => {
-    const ranks = ["2", "3", "4", "5"];
-    round.turn = 0;
-    round.hands = [0, 1, 2, 3].map((seat) => [card(ranks[seat], "hearts", seat === winnerSeat ? 12 : seat)]);
-    [0, 1, 2, 3].forEach((seat) => playCard(round, seat, round.hands[seat][0].id));
-    collectTrick(round);
-  };
-  forceTrick(0);
-  assert.deepEqual(round.tricks, [0, 0]);
-  assert.equal(round.pool, 1);
-  assert.deepEqual(round.collectedBySeat, [1, 0, 0, 0]);
-  forceTrick(2);
-  assert.deepEqual(round.tricks, [0, 0]);
-  forceTrick(2);
-  assert.deepEqual(round.tricks, [3, 0]);
-  assert.equal(round.pool, 0);
-  assert.deepEqual(round.collectedBySeat, [1, 0, 2, 0]);
+  });
 });
 
 test("hidden sir keeps selected trump secret until a valid reveal", () => {
@@ -256,10 +245,7 @@ function finalTrickRound({
     trick: [],
     completedTricks: Array.from({ length: cardsPerPlayer - 1 }, () => ({})),
     tricks: [...preTricks],
-    capturedBySeat: [2, 2, 0, 0],
     collectedBySeat: [2, 2, 0, 0],
-    pool: 0,
-    lastTrickWinner: null,
     pendingWinner: null,
     winner: null,
     court: false,
@@ -359,8 +345,8 @@ test("room themes and auction mode are validated and exposed", () => {
   assert.equal(bidderView.round.bidState.contractTeam, null);
 });
 
-test("room view separates raw won tricks from Double and Hidden Sir bundle scores", () => {
-  ["double", "hidden"].forEach((mode) => {
+test("room view exposes one actual team trick tally for every mode", () => {
+  ["single", "double", "hidden"].forEach((mode) => {
     const room = testRoom([0, 1, 2, 3].map((seat) => ({
       name: `P${seat}`,
       token: `t${seat}`,
@@ -368,13 +354,12 @@ test("room view separates raw won tricks from Double and Hidden Sir bundle score
     })));
     room.round = createRound(3, { deckSize: 20, mode }, () => 0.5);
     room.round.phase = "playing";
-    room.round.tricks = [0, 0];
+    room.round.tricks = [3, 0];
     room.round.collectedBySeat = [1, 0, 2, 0];
-    room.round.pool = 3;
 
     const view = roomView(room, { role: "player", seat: 0 });
-    assert.deepEqual(view.round.wonTricks, [3, 0]);
-    assert.deepEqual(view.round.tricks, [0, 0]);
+    assert.deepEqual(view.round.tricks, [3, 0]);
+    assert.equal("wonTricks" in view.round, false);
   });
 });
 
