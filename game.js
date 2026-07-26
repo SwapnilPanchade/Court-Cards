@@ -54,14 +54,35 @@ function winningPlay(plays, trump, trumpEffectiveFrom = 0) {
 function createRound(dealer, settings = {}, random = Math.random) {
   const deckSize = DECK_SIZES.includes(settings.deckSize) ? settings.deckSize : 52;
   const mode = MODES.includes(settings.mode) ? settings.mode : "single";
+  const auctionMode = settings.auctionMode === true;
   const caller = (dealer + 1) % 4;
+  const cardsPerPlayer = deckSize / 4;
   return {
-    phase: "choosing_trump",
+    phase: auctionMode ? "bidding" : "choosing_trump",
     dealer,
     caller,
     mode,
     deckSize,
-    cardsPerPlayer: deckSize / 4,
+    cardsPerPlayer,
+    auctionMode,
+    bidState: auctionMode ? {
+      openingSeat: caller,
+      minimumBid: Math.floor(cardsPerPlayer / 2) + 1,
+      maximumBid: cardsPerPlayer,
+      highestBid: null,
+      highestBidder: null,
+      turn: caller,
+      actedSeats: [],
+      passedSeats: [],
+      history: [],
+      complete: false,
+      decisionSeat: caller,
+      decision: null,
+      decisionReason: null,
+      contractBid: null,
+      contractTeam: null,
+      contractMade: null
+    } : null,
     trump: null,
     trumpCardId: null,
     trumpRevealed: mode !== "hidden",
@@ -82,12 +103,107 @@ function createRound(dealer, settings = {}, random = Math.random) {
     passedBy: [],
     pendingWinner: null,
     winner: null,
-    court: false
+    court: false,
+    resultRecorded: false
   };
+}
+
+function assertBiddingTurn(round, seat) {
+  if (!round.auctionMode || round.phase !== "bidding" || !round.bidState) throw new Error("This round does not have an active auction.");
+  if (round.bidState.turn !== seat) throw new Error("Wait for your bidding turn.");
+  if (round.bidState.actedSeats.includes(seat)) throw new Error("You already acted in this auction.");
+}
+
+function finishAuctionAction(round, seat) {
+  const bidState = round.bidState;
+  bidState.actedSeats.push(seat);
+
+  if (bidState.actedSeats.length < 4) {
+    bidState.turn = (seat + 1) % 4;
+    round.turn = bidState.turn;
+    return round;
+  }
+
+  if (bidState.highestBidder === null) {
+    bidState.highestBidder = bidState.openingSeat;
+    bidState.highestBid = bidState.minimumBid;
+    bidState.history.push({ seat: bidState.openingSeat, action: "forced_bid", bid: bidState.minimumBid });
+    return finalizeAuction(round, bidState.openingSeat, "auto_keep", "all_pass");
+  }
+
+  bidState.turn = null;
+  bidState.contractBid = bidState.highestBid;
+  if (bidState.highestBidder === bidState.openingSeat) {
+    return finalizeAuction(round, bidState.openingSeat, "auto_keep", "opening_highest");
+  }
+
+  round.turn = bidState.decisionSeat;
+  round.phase = "auction_decision";
+  return round;
+}
+
+function finalizeAuction(round, caller, decision, decisionReason = null) {
+  const bidState = round.bidState;
+  bidState.complete = true;
+  bidState.decision = decision;
+  bidState.decisionReason = decisionReason;
+  bidState.contractBid = bidState.highestBid;
+  bidState.contractTeam = teamForSeat(caller);
+  round.caller = caller;
+  round.turn = caller;
+  round.phase = "choosing_trump";
+  return round;
+}
+
+function decideAuction(round, seat, decision) {
+  if (!round.auctionMode || round.phase !== "auction_decision" || !round.bidState) {
+    throw new Error("There is no auction decision waiting.");
+  }
+  const bidState = round.bidState;
+  if (seat !== bidState.decisionSeat) throw new Error("Only the original hukum caller can decide.");
+  const normalizedDecision = String(decision || "").trim().toLowerCase();
+  if (normalizedDecision !== "keep" && normalizedDecision !== "give") {
+    throw new Error("Choose keep or give.");
+  }
+  if (bidState.highestBidder === null || bidState.highestBidder === bidState.openingSeat) {
+    throw new Error("This auction does not need a decision.");
+  }
+
+  const caller = normalizedDecision === "keep" ? bidState.openingSeat : bidState.highestBidder;
+  bidState.history.push({
+    seat,
+    action: normalizedDecision,
+    bid: bidState.highestBid,
+    awardedSeat: caller
+  });
+  return finalizeAuction(round, caller, normalizedDecision);
+}
+
+function placeBid(round, seat, value) {
+  assertBiddingTurn(round, seat);
+  const bid = Number(value);
+  const bidState = round.bidState;
+  const minimum = bidState.highestBid === null ? bidState.minimumBid : bidState.highestBid + 1;
+  if (minimum > bidState.maximumBid) throw new Error("The maximum contract is already bid; pass.");
+  if (!Number.isInteger(bid) || bid < minimum || bid > bidState.maximumBid) {
+    throw new Error(`Bid ${minimum}–${bidState.maximumBid} tricks, or pass.`);
+  }
+  bidState.highestBid = bid;
+  bidState.highestBidder = seat;
+  bidState.history.push({ seat, action: "bid", bid });
+  return finishAuctionAction(round, seat);
+}
+
+function passBid(round, seat) {
+  assertBiddingTurn(round, seat);
+  round.bidState.passedSeats.push(seat);
+  round.bidState.history.push({ seat, action: "pass", bid: null });
+  return finishAuctionAction(round, seat);
 }
 
 function passTrump(round, seat) {
   if (round.phase !== "choosing_trump") throw new Error("Hukum has already been chosen.");
+  if (round.auctionMode) throw new Error("The auction winner must choose hukum.");
   if (seat !== round.caller) throw new Error("Only the current hukum caller can pass.");
   if (round.passedBy.length >= 3) throw new Error("Last caller must choose hukum.");
   round.passedBy.push(seat);
@@ -195,7 +311,14 @@ function collectTrick(round) {
     const shouldEnd = isLastTrick;
     if (shouldEnd) {
       round.phase = "round_over";
-      round.winner = round.tricks[0] > round.tricks[1] ? 0 : 1;
+      if (round.auctionMode && round.bidState?.contractTeam !== null) {
+        round.bidState.contractMade = round.tricks[round.bidState.contractTeam] >= round.bidState.contractBid;
+        round.winner = round.bidState.contractMade ? round.bidState.contractTeam : 1 - round.bidState.contractTeam;
+      } else {
+        const callerTeam = teamForSeat(round.caller);
+        const callerMadeMajority = round.tricks[callerTeam] > round.cardsPerPlayer / 2;
+        round.winner = callerMadeMajority ? callerTeam : 1 - callerTeam;
+      }
       round.court = round.mode === "single"
         ? round.tricks[1 - round.winner] === 0
         : round.tricks[round.winner] === round.cardsPerPlayer;
@@ -215,6 +338,9 @@ module.exports = {
   canPlayCard,
   winningPlay,
   createRound,
+  placeBid,
+  passBid,
+  decideAuction,
   chooseTrump,
   chooseHiddenTrump,
   passTrump,

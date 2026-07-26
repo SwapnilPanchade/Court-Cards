@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createDeck, canPlayCard, winningPlay, createRound, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } = require("../game");
+const { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } = require("../game");
+const { TABLE_THEMES, AVATAR_IDS, roomView, updateRoomSettings, chooseRoomTeam, chooseRoomAvatar, recordRoundResult, assertMatchOpen } = require("../server");
 
 const card = (rank, suit, value) => ({ id: `${rank}-${suit}`, rank, suit, value });
 
@@ -113,4 +114,279 @@ test("hidden sir keeps selected trump secret until a valid reveal", () => {
   revealTrump(round, 0);
   assert.equal(round.trumpRevealed, true);
   assert.equal(round.mustTrumpSeat, 0);
+});
+
+function contestedAuction() {
+  const round = createRound(3, { deckSize: 36, mode: "single", auctionMode: true }, () => 0.5);
+  placeBid(round, 0, 5);
+  placeBid(round, 1, 6);
+  passBid(round, 2);
+  passBid(round, 3);
+  return round;
+}
+
+test("auction visits every player once and waits for the original caller's decision", () => {
+  const round = createRound(3, { deckSize: 36, mode: "single", auctionMode: true }, () => 0.5);
+  assert.equal(round.phase, "bidding");
+  assert.equal(round.bidState.minimumBid, 5);
+  assert.equal(round.bidState.maximumBid, 9);
+  placeBid(round, 0, 5);
+  assert.throws(() => placeBid(round, 1, 5), /Bid 6/);
+  placeBid(round, 1, 6);
+  passBid(round, 2);
+  passBid(round, 3);
+  assert.equal(round.phase, "auction_decision");
+  assert.equal(round.caller, 0);
+  assert.equal(round.turn, 0);
+  assert.equal(round.bidState.contractBid, 6);
+  assert.equal(round.bidState.contractTeam, null);
+  assert.equal(round.bidState.decisionSeat, 0);
+  assert.equal(round.bidState.decision, null);
+  assert.equal(round.bidState.complete, false);
+  assert.deepEqual(round.bidState.actedSeats, [0, 1, 2, 3]);
+});
+
+test("original caller can keep hukum by matching the highest contract", () => {
+  const round = contestedAuction();
+  assert.throws(() => decideAuction(round, 1, "give"), /original hukum caller/i);
+  assert.throws(() => decideAuction(round, 0, "raise"), /keep or give/i);
+  decideAuction(round, 0, "keep");
+  assert.equal(round.phase, "choosing_trump");
+  assert.equal(round.caller, 0);
+  assert.equal(round.turn, 0);
+  assert.equal(round.bidState.highestBidder, 1);
+  assert.equal(round.bidState.contractBid, 6);
+  assert.equal(round.bidState.contractTeam, 0);
+  assert.equal(round.bidState.decision, "keep");
+  assert.equal(round.bidState.complete, true);
+  assert.equal(round.bidState.history.at(-1).action, "keep");
+  assert.throws(() => passTrump(round, 0), /auction winner/i);
+});
+
+test("original caller can give hukum and its contract to the highest bidder", () => {
+  const round = contestedAuction();
+  decideAuction(round, 0, "give");
+  assert.equal(round.phase, "choosing_trump");
+  assert.equal(round.caller, 1);
+  assert.equal(round.turn, 1);
+  assert.equal(round.bidState.contractBid, 6);
+  assert.equal(round.bidState.contractTeam, 1);
+  assert.equal(round.bidState.decision, "give");
+  assert.equal(round.bidState.history.at(-1).awardedSeat, 1);
+});
+
+test("all-pass auction forces the opening caller at the normal majority", () => {
+  const round = createRound(3, { deckSize: 20, auctionMode: true }, () => 0.5);
+  [0, 1, 2, 3].forEach((seat) => passBid(round, seat));
+  assert.equal(round.phase, "choosing_trump");
+  assert.equal(round.caller, 0);
+  assert.equal(round.bidState.contractBid, 3);
+  assert.equal(round.bidState.contractTeam, 0);
+  assert.equal(round.bidState.complete, true);
+  assert.equal(round.bidState.decision, "auto_keep");
+  assert.equal(round.bidState.decisionReason, "all_pass");
+  assert.equal(round.bidState.history.at(-1).action, "forced_bid");
+});
+
+test("opening caller auto-keeps when already the highest bidder", () => {
+  const round = createRound(3, { deckSize: 20, auctionMode: true }, () => 0.5);
+  placeBid(round, 0, 3);
+  [1, 2, 3].forEach((seat) => passBid(round, seat));
+  assert.equal(round.phase, "choosing_trump");
+  assert.equal(round.caller, 0);
+  assert.equal(round.bidState.contractBid, 3);
+  assert.equal(round.bidState.contractTeam, 0);
+  assert.equal(round.bidState.decision, "auto_keep");
+  assert.equal(round.bidState.decisionReason, "opening_highest");
+});
+
+function finalTrickRound({
+  contractTeam = null,
+  contractBid = null,
+  finalWinnerSeat = 0,
+  cardsPerPlayer = 5,
+  preTricks = [2, 2],
+  caller = 0
+} = {}) {
+  const ranks = ["2", "3", "4", "5"];
+  const values = [0, 1, 2, 3];
+  ranks[finalWinnerSeat] = "A";
+  values[finalWinnerSeat] = 12;
+  return {
+    phase: "playing",
+    mode: "single",
+    cardsPerPlayer,
+    auctionMode: contractTeam !== null,
+    bidState: contractTeam === null ? null : { contractTeam, contractBid, contractMade: null },
+    caller,
+    trump: "clubs",
+    trumpRevealed: true,
+    trumpEffectiveFrom: 0,
+    mustTrumpSeat: null,
+    turn: 0,
+    trick: [],
+    completedTricks: Array.from({ length: cardsPerPlayer - 1 }, () => ({})),
+    tricks: [...preTricks],
+    capturedBySeat: [2, 2, 0, 0],
+    collectedBySeat: [2, 2, 0, 0],
+    pool: 0,
+    lastTrickWinner: null,
+    pendingWinner: null,
+    winner: null,
+    court: false,
+    resultRecorded: false,
+    hands: ranks.map((rank, seat) => [card(rank, "hearts", values[seat])])
+  };
+}
+
+function finishFinalTrick(round) {
+  [0, 1, 2, 3].forEach((seat) => playCard(round, seat, round.hands[seat][0].id));
+  collectTrick(round);
+  return round;
+}
+
+[
+  { name: "Team A makes its contract", contractTeam: 0, finalWinnerSeat: 0, bid: 3, tricks: [3, 2], made: true, winner: 0 },
+  { name: "Team A fails its contract", contractTeam: 0, finalWinnerSeat: 0, bid: 4, tricks: [3, 2], made: false, winner: 1 },
+  { name: "Team B makes its contract", contractTeam: 1, finalWinnerSeat: 1, bid: 3, tricks: [2, 3], made: true, winner: 1 },
+  { name: "Team B fails its contract", contractTeam: 1, finalWinnerSeat: 1, bid: 4, tricks: [2, 3], made: false, winner: 0 }
+].forEach((scenario) => {
+  test(`auction scoring: ${scenario.name}`, () => {
+    const round = finishFinalTrick(finalTrickRound({
+      contractTeam: scenario.contractTeam,
+      contractBid: scenario.bid,
+      finalWinnerSeat: scenario.finalWinnerSeat
+    }));
+    assert.equal(round.phase, "round_over");
+    assert.deepEqual(round.tricks, scenario.tricks);
+    assert.equal(round.tricks[0] + round.tricks[1], round.cardsPerPlayer);
+    assert.equal(round.bidState.contractMade, scenario.made);
+    assert.equal(round.winner, scenario.winner);
+  });
+});
+
+test("an even-trick tie is a failed majority for the hukum caller's team", () => {
+  const callerTeamA = finishFinalTrick(finalTrickRound({
+    cardsPerPlayer: 6,
+    preTricks: [2, 3],
+    finalWinnerSeat: 0,
+    caller: 0
+  }));
+  assert.deepEqual(callerTeamA.tricks, [3, 3]);
+  assert.equal(callerTeamA.winner, 1);
+
+  const callerTeamB = finishFinalTrick(finalTrickRound({
+    cardsPerPlayer: 6,
+    preTricks: [2, 3],
+    finalWinnerSeat: 0,
+    caller: 1
+  }));
+  assert.deepEqual(callerTeamB.tricks, [3, 3]);
+  assert.equal(callerTeamB.winner, 0);
+});
+
+function testRoom(players = [{ name: "Host" }, null, null, null]) {
+  return {
+    code: "TEST1",
+    players,
+    spectators: [],
+    hostSeat: 0,
+    round: null,
+    score: [0, 0],
+    matchTarget: 2,
+    matchWinner: null,
+    restartVote: null,
+    tableTheme: "noir",
+    settings: { deckSize: 36, mode: "single", auctionMode: false }
+  };
+}
+
+test("room themes and auction mode are validated and exposed", () => {
+  const room = testRoom([{ name: "Host", token: "h", socketId: "s" }, null, null, null]);
+  updateRoomSettings(room, 0, { tableTheme: "neon", auctionMode: true });
+  assert.equal(room.tableTheme, "neon");
+  assert.equal(room.settings.auctionMode, true);
+  assert.deepEqual(TABLE_THEMES, ["noir", "comic", "neon", "adda", "gully"]);
+  assert.throws(() => updateRoomSettings(room, 0, { tableTheme: "casino" }), /valid table theme/);
+
+  room.players = [0, 1, 2, 3].map((seat) => ({ name: `P${seat}`, token: `t${seat}`, socketId: `s${seat}` }));
+  room.round = createRound(3, room.settings, () => 0.5);
+  const view = roomView(room, { role: "player", seat: 0 });
+  assert.equal(view.tableTheme, "neon");
+  assert.equal(view.round.phase, "bidding");
+  assert.equal(view.round.hand.length, 5);
+  assert.equal(view.round.bidState.canBid, true);
+  assert.equal(view.round.bidState.nextMinimumBid, 5);
+
+  room.round = contestedAuction();
+  const ownerView = roomView(room, { role: "player", seat: 0 });
+  const bidderView = roomView(room, { role: "player", seat: 1 });
+  assert.equal(ownerView.round.phase, "auction_decision");
+  assert.equal(ownerView.round.hand.length, 5);
+  assert.equal(ownerView.round.bidState.canDecide, true);
+  assert.equal(ownerView.round.bidState.canKeep, true);
+  assert.equal(ownerView.round.bidState.canGive, true);
+  assert.equal(bidderView.round.bidState.canDecide, false);
+  assert.equal(bidderView.round.bidState.contractTeam, null);
+});
+
+test("team choice prefers an empty seat, can replace a bot, and rejects a full human team", () => {
+  const host = { name: "Host" };
+  const bot = { name: "Bot", bot: true };
+  const room = testRoom([host, bot, { name: "Partner" }, null]);
+  assert.equal(chooseRoomTeam(room, 0, "B"), 3);
+  assert.equal(room.players[3], host);
+  assert.equal(room.players[1], bot);
+  assert.equal(room.hostSeat, 3);
+
+  const botRoom = testRoom([host, bot, { name: "Partner" }, { name: "Opponent" }]);
+  assert.equal(chooseRoomTeam(botRoom, 0, 1), 1);
+  assert.equal(botRoom.players[1], host);
+
+  const fullRoom = testRoom([{ name: "P0" }, { name: "P1" }, { name: "P2" }, { name: "P3" }]);
+  assert.throws(() => chooseRoomTeam(fullRoom, 0, "B"), /Team B is full/);
+});
+
+test("room avatars are validated, exposed, and locked after play starts", () => {
+  const room = testRoom([{ name: "Host", token: "h", socketId: "s", avatarId: "jugaadu" }, null, null, null]);
+  assert.deepEqual(AVATAR_IDS, [
+    "kadki-king",
+    "chai-champion",
+    "jugaadu",
+    "sher",
+    "filmy-villain",
+    "office-babu",
+    "cool-aunty",
+    "biker-didi",
+    "glam-queen",
+    "bollywood-boss"
+  ]);
+  assert.equal(chooseRoomAvatar(room, 0, "sher"), "sher");
+  assert.equal(room.players[0].avatarId, "sher");
+  assert.throws(() => chooseRoomAvatar(room, 0, "unknown"), /valid avatar/);
+
+  const lobbyView = roomView(room, { role: "player", seat: 0 });
+  assert.equal(lobbyView.players[0].avatarId, "sher");
+  assert.deepEqual(lobbyView.options.avatarIds, AVATAR_IDS);
+
+  room.round = createRound(3, room.settings, () => 0.5);
+  assert.throws(() => chooseRoomAvatar(room, 0, "jugaadu"), /cannot change after the game starts/);
+});
+
+test("round result gives exactly one point to the winning team and resolves the match target", () => {
+  const room = testRoom();
+  assert.doesNotThrow(() => assertMatchOpen(room));
+  const firstWin = { winner: 1, resultRecorded: false };
+  recordRoundResult(room, firstWin);
+  assert.deepEqual(room.score, [0, 1]);
+  assert.equal(room.matchWinner, null);
+
+  recordRoundResult(room, firstWin);
+  assert.deepEqual(room.score, [0, 1]);
+
+  recordRoundResult(room, { winner: 1, resultRecorded: false });
+  assert.deepEqual(room.score, [0, 2]);
+  assert.equal(room.matchWinner, 1);
+  assert.throws(() => assertMatchOpen(room), /Match is complete/);
+  assert.throws(() => recordRoundResult(room, { winner: null }), /winner is not resolved/i);
 });

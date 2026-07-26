@@ -3,59 +3,173 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0620" />
+    <meta name="theme-color" content="#0b1020" />
     <title>Court Piece — Play with friends</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23170f3d'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23ffc857'%3E♠%3C/text%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23130f25'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23f4c45e'%3E%E2%99%A0%3C/text%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Fraunces:opsz,wght@9..144,700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Fraunces:opsz,wght@9..144,700;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="noise"></div>
+    <div class="noise" aria-hidden="true"></div>
     <main id="app">
       <section id="home" class="home shell">
-        <div class="brand-mark">♠</div>
-        <p class="eyebrow">Private table · friends or bots</p>
-        <h1>Court Piece</h1>
-        <p class="lede">Call the hukum. Read the table. Take the match.</p>
+        <div class="home-copy">
+          <div class="brand-mark" aria-hidden="true">♠</div>
+          <p class="eyebrow">Private table · friends or bots</p>
+          <h1>Court<br /><span>Piece</span></h1>
+          <p class="lede">Call the hukum. Read the table. Take the match.</p>
+          <div class="home-table-preview" aria-hidden="true">
+            <span class="preview-seat preview-seat-top"></span>
+            <span class="preview-seat preview-seat-left"></span>
+            <span class="preview-seat preview-seat-right"></span>
+            <i></i><i></i><i></i>
+          </div>
+          <div class="concept-pills" aria-label="Five visual styles">
+            <span>Minimal</span><span>Comic</span><span>Retro</span><span>Cartoon</span><span>Gully</span>
+          </div>
+        </div>
 
         <div class="join-card">
+          <div class="join-heading">
+            <div>
+              <p class="mini-label">QUICK PLAY</p>
+              <h2>Take your seat</h2>
+            </div>
+            <span class="live-chip"><i></i> Live rooms</span>
+          </div>
+
           <label for="name">Your name</label>
           <input id="name" maxlength="18" autocomplete="name" placeholder="e.g. Swapnil" />
+
+          <fieldset class="avatar-picker avatar-picker-home">
+            <legend>Pick your room avatar</legend>
+            <div class="avatar-options">
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-kadki-king" value="kadki-king" checked />
+              <label class="avatar-choice" for="create-avatar-kadki-king" title="Kadki King">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/kadki-king.webp')"><b>KK</b></span><span>Kadki</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-chai-champion" value="chai-champion" />
+              <label class="avatar-choice" for="create-avatar-chai-champion" title="Chai Champion">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/chai-champion.webp')"><b>CC</b></span><span>Chai</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-jugaadu" value="jugaadu" />
+              <label class="avatar-choice" for="create-avatar-jugaadu" title="Jugaadu">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/jugaadu.webp')"><b>JG</b></span><span>Jugaadu</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-sher" value="sher" />
+              <label class="avatar-choice" for="create-avatar-sher" title="Sher">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/sher.webp')"><b>SH</b></span><span>Sher</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-filmy-villain" value="filmy-villain" />
+              <label class="avatar-choice" for="create-avatar-filmy-villain" title="Filmy Villain">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/filmy-villain.webp')"><b>FV</b></span><span>Villain</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-office-babu" value="office-babu" />
+              <label class="avatar-choice" for="create-avatar-office-babu" title="Office Babu">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/office-babu.webp')"><b>OB</b></span><span>Babu</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-cool-aunty" value="cool-aunty" />
+              <label class="avatar-choice" for="create-avatar-cool-aunty" title="Cool Aunty">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/cool-aunty.webp')"><b>CA</b></span><span>Aunty</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-biker-didi" value="biker-didi" />
+              <label class="avatar-choice" for="create-avatar-biker-didi" title="Biker Didi">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/biker-didi.webp')"><b>BD</b></span><span>Biker</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-glam-queen" value="glam-queen" />
+              <label class="avatar-choice" for="create-avatar-glam-queen" title="Glam Queen">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/glam-queen.webp')"><b>GQ</b></span><span>Glam</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-avatar" id="create-avatar-bollywood-boss" value="bollywood-boss" />
+              <label class="avatar-choice" for="create-avatar-bollywood-boss" title="Bollywood Boss">
+                <span class="avatar-portrait" style="--avatar-image: url('assets/avatars/bollywood-boss.webp')"><b>BB</b></span><span>Boss</span>
+              </label>
+            </div>
+          </fieldset>
+
           <div class="room-row">
-            <input id="room-code" maxlength="5" autocomplete="off" placeholder="ROOM CODE" />
+            <input id="room-code" maxlength="5" autocomplete="off" placeholder="ROOM CODE" aria-label="Room code" />
             <button id="join-button" class="secondary">Join table</button>
           </div>
           <button id="spectate-button" class="spectate-button secondary">Watch as spectator</button>
-          <div class="or"><span>or</span></div>
-          <button id="create-button" class="primary">Create a private table</button>
+
+          <div class="or"><span>or create your table</span></div>
+
+          <fieldset class="theme-picker theme-picker-home">
+            <legend>Choose the table look</legend>
+            <div class="theme-options">
+              <input class="visually-hidden" type="radio" name="create-table-theme" id="create-theme-noir" value="noir" />
+              <label class="theme-choice theme-choice-noir" for="create-theme-noir">
+                <span class="theme-swatch"><i></i></span><span>Noir</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-table-theme" id="create-theme-comic" value="comic" />
+              <label class="theme-choice theme-choice-comic" for="create-theme-comic">
+                <span class="theme-swatch"><i></i></span><span>Comic</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-table-theme" id="create-theme-neon" value="neon" />
+              <label class="theme-choice theme-choice-neon" for="create-theme-neon">
+                <span class="theme-swatch"><i></i></span><span>2088</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-table-theme" id="create-theme-adda" value="adda" />
+              <label class="theme-choice theme-choice-adda" for="create-theme-adda">
+                <span class="theme-swatch"><i></i></span><span>Adda</span>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-table-theme" id="create-theme-gully" value="gully" checked />
+              <label class="theme-choice theme-choice-gully" for="create-theme-gully">
+                <span class="theme-swatch"><i></i></span><span>Gully</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="auction-setting auction-setting-create" for="create-auction-mode">
+            <input id="create-auction-mode" type="checkbox" />
+            <span><strong>Auction Hukum</strong><small>Bid before the hukum call</small></span>
+            <i aria-hidden="true"></i>
+          </label>
+
+          <button id="create-button" class="primary create-button">Create a private table <span aria-hidden="true">→</span></button>
           <p id="home-error" class="error" role="alert"></p>
+          <p class="fine-print">No account · share one code · landscape recommended</p>
         </div>
-        <p class="fine-print">No account. Share one code. Built for a landscape table.</p>
       </section>
 
       <section id="game" class="game hidden">
         <header class="game-header">
-          <div>
+          <div class="room-cluster">
             <span class="mini-label">ROOM</span>
             <button id="copy-code" class="room-code" title="Copy invite link"></button>
             <div class="room-tools">
               <button id="restart-button" class="text-button hidden">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
                 Restart
               </button>
               <button id="exit-button" class="text-button danger">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v1"/><path d="M15 12H3m0 0 4-4m-4 4 4 4"/></svg>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v1"/><path d="M15 12H3m0 0 4-4m-4 4 4 4"/></svg>
                 Exit
               </button>
             </div>
           </div>
-          <div class="scoreboard">
-            <span>Team A <b id="score-a">0</b></span>
-            <i></i>
-            <span>Team B <b id="score-b">0</b></span>
-            <small><svg class="icon trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"/></svg>Match score</small>
+
+          <div class="header-center">
+            <div class="scoreboard">
+              <span>Team A <b id="score-a">0</b></span>
+              <i></i>
+              <span>Team B <b id="score-b">0</b></span>
+              <small><svg class="icon trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"/></svg>Match</small>
+            </div>
+          </div>
+
+          <div class="experience-controls" aria-label="Game experience controls">
+            <label class="control-toggle" for="sound-toggle" title="Mute or unmute game and meme sounds">
+              <input id="sound-toggle" type="checkbox" checked />
+              <span class="control-icon" aria-hidden="true">♪</span><span class="control-label">Sound</span>
+            </label>
+            <label class="control-toggle" for="effects-toggle" title="Turn celebration effects on or off">
+              <input id="effects-toggle" type="checkbox" checked />
+              <span class="control-icon" aria-hidden="true">✦</span><span class="control-label">FX</span>
+            </label>
           </div>
         </header>
 
@@ -63,7 +177,7 @@
           <div id="status" class="status-pill">Waiting for players</div>
           <div id="deal-score" class="deal-score hidden"></div>
           <div id="turn-timer" class="turn-timer hidden">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
             <span id="timer-value">40</span>s
           </div>
           <div id="trump-badge" class="trump-badge hidden"></div>
@@ -71,11 +185,19 @@
 
         <div id="spectator-bar" class="spectator-bar hidden">
           <span>Watching</span>
-          <select id="watch-player"></select>
+          <select id="watch-player" aria-label="Player to watch"></select>
           <b id="spectator-count"></b>
         </div>
 
         <div class="table-wrap">
+          <div class="scene-layer" aria-hidden="true">
+            <div class="scene-skyline"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="scene-grid"></div>
+            <div class="scene-bunting"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="scene-lights"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="scene-mural"><span>♠</span><strong>PHAA!</strong></div>
+            <div class="scene-rain"></div>
+          </div>
           <div class="table">
             <div id="motion-layer" class="motion-layer" aria-live="polite" aria-atomic="true"></div>
             <div id="center-deck" class="center-deck hidden" aria-hidden="true">
@@ -90,23 +212,97 @@
         </div>
 
         <section id="lobby-panel" class="panel lobby-panel hidden">
-          <h2>Your table is ready</h2>
-          <p>Share the room code with three friends. Partners sit opposite each other.</p>
-          <div class="settings-grid">
-            <label>Deck
-              <select id="deck-size"></select>
-            </label>
-            <label>Mode
-              <select id="game-mode">
-                <option value="single">Single Sir</option>
-                <option value="double">Double Sir</option>
-                <option value="hidden">Hidden Sir</option>
-              </select>
-            </label>
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">HOST SETUP</p>
+              <h2>Your table is ready</h2>
+            </div>
+            <span class="host-chip">4 seats</span>
           </div>
-          <button id="share-button" class="secondary">Share invite</button>
-          <button id="fill-bots-button" class="bot-button secondary">Fill empty seats with bots</button>
-          <button id="start-button" class="primary">Start game</button>
+          <p class="panel-intro">Share the code, pick the vibe, then choose your side.</p>
+
+          <div class="panel-scroll">
+            <div class="settings-grid">
+              <label>Deck
+                <select id="deck-size"></select>
+              </label>
+              <label>Mode
+                <select id="game-mode">
+                  <option value="single">Single Sir</option>
+                  <option value="double">Double Sir</option>
+                  <option value="hidden">Hidden Sir</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="auction-setting" for="auction-mode">
+              <input id="auction-mode" type="checkbox" />
+              <span>
+                <strong>Auction Hukum</strong>
+                <small>Bid for the contract before choosing hukum</small>
+              </span>
+              <i aria-hidden="true"></i>
+            </label>
+
+            <fieldset class="theme-picker theme-picker-lobby">
+              <legend>Table style</legend>
+              <div class="theme-options">
+                <input class="visually-hidden" type="radio" name="table-theme" id="theme-noir" value="noir" />
+                <label class="theme-choice theme-choice-noir" for="theme-noir"><span class="theme-swatch"><i></i></span><span>Noir</span></label>
+                <input class="visually-hidden" type="radio" name="table-theme" id="theme-comic" value="comic" />
+                <label class="theme-choice theme-choice-comic" for="theme-comic"><span class="theme-swatch"><i></i></span><span>Comic</span></label>
+                <input class="visually-hidden" type="radio" name="table-theme" id="theme-neon" value="neon" />
+                <label class="theme-choice theme-choice-neon" for="theme-neon"><span class="theme-swatch"><i></i></span><span>2088</span></label>
+                <input class="visually-hidden" type="radio" name="table-theme" id="theme-adda" value="adda" />
+                <label class="theme-choice theme-choice-adda" for="theme-adda"><span class="theme-swatch"><i></i></span><span>Adda</span></label>
+                <input class="visually-hidden" type="radio" name="table-theme" id="theme-gully" value="gully" checked />
+                <label class="theme-choice theme-choice-gully" for="theme-gully"><span class="theme-swatch"><i></i></span><span>Gully</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="avatar-picker avatar-picker-lobby">
+              <legend>Your avatar <small>Only for this room</small></legend>
+              <div class="avatar-options">
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-kadki-king" value="kadki-king" />
+                <label class="avatar-choice" for="room-avatar-kadki-king" title="Kadki King"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/kadki-king.webp')"><b>KK</b></span><span>Kadki</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-chai-champion" value="chai-champion" />
+                <label class="avatar-choice" for="room-avatar-chai-champion" title="Chai Champion"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/chai-champion.webp')"><b>CC</b></span><span>Chai</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-jugaadu" value="jugaadu" />
+                <label class="avatar-choice" for="room-avatar-jugaadu" title="Jugaadu"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/jugaadu.webp')"><b>JG</b></span><span>Jugaadu</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-sher" value="sher" />
+                <label class="avatar-choice" for="room-avatar-sher" title="Sher"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/sher.webp')"><b>SH</b></span><span>Sher</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-filmy-villain" value="filmy-villain" />
+                <label class="avatar-choice" for="room-avatar-filmy-villain" title="Filmy Villain"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/filmy-villain.webp')"><b>FV</b></span><span>Villain</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-office-babu" value="office-babu" />
+                <label class="avatar-choice" for="room-avatar-office-babu" title="Office Babu"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/office-babu.webp')"><b>OB</b></span><span>Babu</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-cool-aunty" value="cool-aunty" />
+                <label class="avatar-choice" for="room-avatar-cool-aunty" title="Cool Aunty"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/cool-aunty.webp')"><b>CA</b></span><span>Aunty</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-biker-didi" value="biker-didi" />
+                <label class="avatar-choice" for="room-avatar-biker-didi" title="Biker Didi"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/biker-didi.webp')"><b>BD</b></span><span>Biker</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-glam-queen" value="glam-queen" />
+                <label class="avatar-choice" for="room-avatar-glam-queen" title="Glam Queen"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/glam-queen.webp')"><b>GQ</b></span><span>Glam</span></label>
+                <input class="visually-hidden" type="radio" name="room-avatar" id="room-avatar-bollywood-boss" value="bollywood-boss" />
+                <label class="avatar-choice" for="room-avatar-bollywood-boss" title="Bollywood Boss"><span class="avatar-portrait" style="--avatar-image: url('assets/avatars/bollywood-boss.webp')"><b>BB</b></span><span>Boss</span></label>
+              </div>
+            </fieldset>
+
+            <div class="team-choice-block" role="group" aria-labelledby="team-choice-title">
+              <div class="setting-title-row">
+                <span id="team-choice-title">Choose your team</span>
+                <small>Partners sit opposite</small>
+              </div>
+              <div class="team-buttons">
+                <button id="team-a-button" class="team-button team-button-a" type="button" data-team="0" aria-pressed="false"><span>A</span> Team A</button>
+                <button id="team-b-button" class="team-button team-button-b" type="button" data-team="1" aria-pressed="false"><span>B</span> Team B</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="lobby-actions">
+            <button id="share-button" class="secondary">Share invite</button>
+            <button id="fill-bots-button" class="bot-button secondary">Fill with bots</button>
+            <button id="start-button" class="primary">Start game</button>
+          </div>
           <p id="lobby-note" class="hint"></p>
         </section>
 
@@ -116,6 +312,38 @@
           <p id="trump-help"></p>
           <div id="suit-buttons" class="suit-buttons"></div>
           <button id="pass-button" class="pass-button secondary">Pass to next player</button>
+        </section>
+
+        <section id="auction-panel" class="panel auction-panel hidden" aria-labelledby="auction-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">AUCTION HUKUM</p>
+              <h2 id="auction-title">Bid for the contract</h2>
+            </div>
+            <span id="auction-contract" class="contract-chip">Open</span>
+          </div>
+          <p id="bid-status" class="panel-intro">Waiting for the opening bid</p>
+          <ol id="bid-history" class="bid-history" aria-label="Bid history"></ol>
+          <div id="auction-bid-controls">
+            <div class="bid-control">
+              <button id="bid-decrease" type="button" class="bid-step" aria-label="Decrease bid">−</button>
+              <label for="bid-value"><span>Your bid</span><input id="bid-value" type="number" inputmode="numeric" min="1" value="16" /></label>
+              <button id="bid-increase" type="button" class="bid-step" aria-label="Increase bid">+</button>
+            </div>
+            <div class="bid-actions">
+              <button id="pass-bid-button" class="secondary" type="button">Pass</button>
+              <button id="place-bid-button" class="primary" type="button">Place bid</button>
+            </div>
+          </div>
+          <div id="auction-decision" class="auction-decision hidden" aria-live="polite">
+            <p class="auction-decision-kicker">Original hukum caller decides</p>
+            <strong id="auction-decision-title">Keep hukum or give the contract?</strong>
+            <p id="auction-decision-copy"></p>
+            <div class="auction-decision-actions">
+              <button id="keep-auction-button" class="primary" type="button">Keep Hukum</button>
+              <button id="give-auction-button" class="secondary" type="button">Give to highest bidder</button>
+            </div>
+          </div>
         </section>
 
         <button id="reveal-button" class="reveal-button hidden">Reveal hukum</button>
@@ -145,6 +373,7 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="effects.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

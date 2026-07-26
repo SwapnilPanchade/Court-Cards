@@ -10,6 +10,215 @@ let state = null;
 let previousState = null;
 let previousHandIds = new Set();
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
+const tableThemes = ["noir", "comic", "neon", "adda", "gully"];
+const avatarIds = ["kadki-king", "chai-champion", "jugaadu", "sher", "filmy-villain", "office-babu", "cool-aunty", "biker-didi", "glam-queen", "bollywood-boss"];
+const createThemeStorageKey = "courtPieceCreateTheme";
+const avatarStorageKey = "courtPieceAvatar";
+const effectsMutedStorageKey = "courtPieceEffectsMuted";
+const effectsIntensityStorageKey = "courtPieceEffectsIntensity";
+let createTableTheme = normalizeTableTheme(localStorage.getItem(createThemeStorageKey)
+  || document.querySelector('input[name="create-table-theme"]:checked')?.value);
+let selectedRoomAvatar = normalizeAvatarId(localStorage.getItem(avatarStorageKey) || storedSession?.avatarId);
+let effectsMuted = localStorage.getItem(effectsMutedStorageKey) === "true";
+let effectsIntensity = localStorage.getItem(effectsIntensityStorageKey) || "medium";
+let lastEnabledEffectsIntensity = ["off", "0"].includes(String(effectsIntensity).toLowerCase()) ? "medium" : effectsIntensity;
+let audioUnlockPending = false;
+let pendingBidValue = null;
+let pendingBidKey = "";
+const effectStreaks = {
+  trick: { team: null, count: 0 },
+  round: { team: null, count: 0 }
+};
+
+function normalizeTableTheme(value) {
+  const theme = String(value || "").trim().toLowerCase();
+  return tableThemes.includes(theme) ? theme : "noir";
+}
+
+function normalizeAvatarId(value) {
+  const avatarId = String(value || "").trim().toLowerCase();
+  return avatarIds.includes(avatarId) ? avatarId : avatarIds[0];
+}
+
+function selectedAvatar(name, fallback = avatarIds[0]) {
+  return normalizeAvatarId(document.querySelector(`input[name="${name}"]:checked`)?.value || fallback);
+}
+
+function syncAvatarRadios(name, value, disabled = false, available = avatarIds) {
+  const avatarId = normalizeAvatarId(value);
+  document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+    input.checked = input.value === avatarId;
+    input.disabled = disabled || !available.includes(input.value);
+  });
+}
+
+function saveAvatarSelection(value) {
+  selectedRoomAvatar = normalizeAvatarId(value);
+  localStorage.setItem(avatarStorageKey, selectedRoomAvatar);
+  if (state && storedSession?.code === state.code && storedSession.role !== "spectator") {
+    storedSession.avatarId = selectedRoomAvatar;
+    localStorage.setItem("courtPieceSession", JSON.stringify(storedSession));
+  }
+  syncAvatarRadios("create-avatar", selectedRoomAvatar);
+  return selectedRoomAvatar;
+}
+
+function initialsFor(name) {
+  return String(name || "P").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("") || "P";
+}
+
+function avatarMarkup(player) {
+  const avatarId = normalizeAvatarId(player?.avatarId);
+  return `<div class="avatar ${player?.bot ? "bot-avatar" : ""}" data-avatar="${avatarId}" style="--avatar-image:url('assets/avatars/${avatarId}.webp')" aria-label="${player.name}'s avatar"><span class="avatar-fallback" aria-hidden="true">${initialsFor(player.name)}</span></div>`;
+}
+
+function applyTableTheme(value) {
+  const theme = normalizeTableTheme(value);
+  document.documentElement.dataset.tableTheme = theme;
+  if (document.body) document.body.dataset.tableTheme = theme;
+  return theme;
+}
+
+function selectedTheme(name, fallback = "noir") {
+  return normalizeTableTheme(document.querySelector(`input[name="${name}"]:checked`)?.value || fallback);
+}
+
+function syncThemeRadios(name, value, disabled = false) {
+  const theme = normalizeTableTheme(value);
+  document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+    input.checked = input.value === theme;
+    input.disabled = disabled;
+  });
+}
+
+function readAuctionMode(element, fallback = false) {
+  if (!element) return Boolean(fallback);
+  if (element.type === "checkbox" || element.type === "radio") return element.checked;
+  return ["true", "1", "auction", "on"].includes(String(element.value).toLowerCase());
+}
+
+function saveCreateTheme(theme) {
+  createTableTheme = normalizeTableTheme(theme);
+  localStorage.setItem(createThemeStorageKey, createTableTheme);
+  syncThemeRadios("create-table-theme", createTableTheme);
+  if (!state) applyTableTheme(createTableTheme);
+}
+
+function effectsApi() {
+  return window.GameEffects || null;
+}
+
+function initializeEffects() {
+  const effects = effectsApi();
+  if (!effects) return null;
+  effects.init({ getTheme: () => state?.tableTheme || createTableTheme });
+  effects.setMuted(effectsMuted);
+  effects.setIntensity(effectsIntensity);
+  return effects;
+}
+
+function resetEffectStreaks(all = true) {
+  effectStreaks.trick = { team: null, count: 0 };
+  if (all) effectStreaks.round = { team: null, count: 0 };
+}
+
+function nextEffectStreak(kind, team) {
+  const tracker = effectStreaks[kind];
+  if (tracker.team === team) tracker.count += 1;
+  else {
+    tracker.team = team;
+    tracker.count = 1;
+  }
+  return tracker.count;
+}
+
+function visualEffectsEnabled() {
+  const value = String(effectsIntensity).trim().toLowerCase();
+  return value !== "off" && value !== "0" && Number(effectsIntensity) !== 0;
+}
+
+function setEffectsMuted(value) {
+  effectsMuted = Boolean(value);
+  localStorage.setItem(effectsMutedStorageKey, String(effectsMuted));
+  initializeEffects()?.setMuted(effectsMuted);
+  syncEffectsControls();
+}
+
+function setEffectsIntensity(value) {
+  effectsIntensity = value;
+  if (visualEffectsEnabled()) lastEnabledEffectsIntensity = value;
+  localStorage.setItem(effectsIntensityStorageKey, String(effectsIntensity));
+  initializeEffects()?.setIntensity(effectsIntensity);
+  syncEffectsControls();
+}
+
+function syncEffectsControls() {
+  const soundToggle = $("#sound-toggle");
+  const effectsToggle = $("#effects-toggle");
+  const muteControl = $("#effects-mute");
+  const intensityControl = $("#effects-intensity");
+  if (soundToggle) soundToggle.checked = !effectsMuted;
+  if (effectsToggle) effectsToggle.checked = visualEffectsEnabled();
+  if (muteControl) {
+    if (muteControl.type === "checkbox") muteControl.checked = effectsMuted;
+    else muteControl.setAttribute("aria-pressed", String(effectsMuted));
+  }
+  if (intensityControl && "value" in intensityControl) intensityControl.value = String(effectsIntensity);
+}
+
+function bindOptionalControls() {
+  syncThemeRadios("create-table-theme", createTableTheme);
+  document.querySelectorAll('input[name="create-table-theme"]').forEach((input) => {
+    input.onchange = () => {
+      if (!input.checked) return;
+      saveCreateTheme(input.value);
+      applyTableTheme(input.value);
+    };
+  });
+
+  syncAvatarRadios("create-avatar", selectedRoomAvatar);
+  document.querySelectorAll('input[name="create-avatar"]').forEach((input) => {
+    input.onchange = () => {
+      if (input.checked) saveAvatarSelection(input.value);
+    };
+  });
+
+  const soundToggle = $("#sound-toggle");
+  if (soundToggle) soundToggle.onchange = () => setEffectsMuted(!soundToggle.checked);
+
+  const effectsToggle = $("#effects-toggle");
+  if (effectsToggle) effectsToggle.onchange = () => {
+    setEffectsIntensity(effectsToggle.checked ? lastEnabledEffectsIntensity : "off");
+  };
+
+  const muteControl = $("#effects-mute");
+  if (muteControl) {
+    if (muteControl.type === "checkbox") muteControl.onchange = () => setEffectsMuted(muteControl.checked);
+    else muteControl.onclick = () => setEffectsMuted(!effectsMuted);
+  }
+
+  const intensityControl = $("#effects-intensity");
+  if (intensityControl) {
+    const updateIntensity = () => setEffectsIntensity(intensityControl.value);
+    intensityControl.oninput = updateIntensity;
+    intensityControl.onchange = updateIntensity;
+  }
+  syncEffectsControls();
+}
+
+async function unlockEffectsAudio() {
+  const effects = initializeEffects();
+  if (!effects || audioUnlockPending) return;
+  audioUnlockPending = true;
+  try {
+    if (await effects.unlockAudio()) {
+      document.removeEventListener("pointerdown", unlockEffectsAudio, true);
+      document.removeEventListener("keydown", unlockEffectsAudio, true);
+    }
+  } finally {
+    audioUnlockPending = false;
+  }
+}
 
 function emit(event, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -23,7 +232,14 @@ function setError(element, error) {
 }
 
 function saveSession(result, name) {
-  storedSession = { code: result.code, token: result.token, name, role: result.role || "player" };
+  const role = result.role || "player";
+  storedSession = {
+    code: result.code,
+    token: result.token,
+    name,
+    role,
+    ...(role === "spectator" ? {} : { avatarId: normalizeAvatarId(result.avatarId || selectedRoomAvatar) })
+  };
   localStorage.setItem("courtPieceSession", JSON.stringify(storedSession));
   history.replaceState(null, "", `?room=${result.code}`);
 }
@@ -32,9 +248,21 @@ async function enterRoom(kind) {
   homeError.textContent = "";
   const name = $("#name").value.trim();
   try {
+    const avatarId = selectedAvatar("create-avatar", selectedRoomAvatar);
     const result = kind === "create"
-      ? await emit("create_room", { name })
-      : await emit(kind === "spectator" ? "join_spectator" : "join_room", { code: $("#room-code").value, name });
+      ? await emit("create_room", {
+        name,
+        avatarId,
+        tableTheme: selectedTheme("create-table-theme", createTableTheme),
+        auctionMode: readAuctionMode($("#create-auction-mode") || $("#auction-mode"), false)
+      })
+      : await emit(kind === "spectator" ? "join_spectator" : "join_room", {
+        code: $("#room-code").value,
+        name,
+        ...(kind === "spectator" ? {} : { avatarId })
+      });
+    if (kind === "create") saveCreateTheme(result.tableTheme || selectedTheme("create-table-theme", createTableTheme));
+    if (kind !== "spectator") saveAvatarSelection(result.avatarId || avatarId);
     saveSession(result, name);
   } catch (error) { setError(homeError, error); }
 }
@@ -61,9 +289,14 @@ $("#exit-button").addEventListener("click", async () => {
   storedSession = null;
   previousState = null;
   state = null;
+  pendingBidValue = null;
+  pendingBidKey = "";
+  resetEffectStreaks();
+  effectsApi()?.reset();
   game.classList.add("hidden");
   home.classList.remove("hidden");
   $("#room-code").value = "";
+  applyTableTheme(createTableTheme);
   history.replaceState(null, "", location.pathname);
 });
 $("#copy-code").addEventListener("click", shareInvite);
@@ -117,7 +350,12 @@ function renderSeats() {
     const position = relativeSeat(absolute);
     const player = state.players[absolute];
     const element = $(`#seat-${position}`);
-    const isTurn = state.round?.turn === absolute && state.round?.phase === "playing";
+    const isTurn = state.round && (
+      state.round.phase === "playing" && state.round.turn === absolute
+      || state.round.phase === "bidding" && state.round.bidState?.turn === absolute
+      || state.round.phase === "auction_decision" && state.round.bidState?.decisionSeat === absolute
+      || state.round.phase === "choosing_trump" && state.round.caller === absolute
+    );
     const remaining = state.round?.handCounts[absolute] || 0;
     const collected = state.round?.collectedBySeat?.[absolute] || 0;
     const collectedChanged = collected > (previousState?.round?.collectedBySeat?.[absolute] || 0);
@@ -129,8 +367,8 @@ function renderSeats() {
       : "";
     element.className = `seat seat-${["bottom", "left", "top", "right"][position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""}`;
     element.innerHTML = player
-      ? `${pile}<div class="avatar ${player.bot ? "bot-avatar" : ""}">${player.bot ? "♟" : player.name[0].toUpperCase()}</div><div>${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</div><div class="team">Team ${player.team ? "B" : "A"}</div>${cardBacks}`
-      : `<div class="avatar">+</div><div>Empty seat</div>`;
+      ? `${pile}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">Team ${player.team ? "B" : "A"}</span></div>${cardBacks}`
+      : `<div class="avatar empty-avatar">+</div><div class="seat-nameplate"><span class="seat-player-name">Empty seat</span></div>`;
   }
 }
 
@@ -138,12 +376,20 @@ function renderHand() {
   const hand = $("#hand");
   const round = state.round;
   const label = $("#hand-label");
-  if (!round?.hand?.length) { hand.innerHTML = ""; label.classList.add("hidden"); previousHandIds = new Set(); return; }
+  if (!round?.hand?.length) {
+    hand.innerHTML = "";
+    hand.style.removeProperty("--hand-card-count");
+    delete hand.dataset.cardCount;
+    label.classList.add("hidden");
+    previousHandIds = new Set();
+    return;
+  }
   label.classList.remove("hidden");
   const owner = state.players[perspectiveSeat()]?.name || "Player";
+  const firstFive = ["choosing_trump", "bidding", "auction_decision"].includes(round.phase);
   label.textContent = isSpectator()
-    ? `${owner}'s ${round.phase === "choosing_trump" ? "first five cards" : `hand · ${round.hand.length} cards`}`
-    : round.phase === "choosing_trump" ? "Your first five cards" : `Your hand · ${round.hand.length} cards`;
+    ? `${owner}'s ${firstFive ? "first five cards" : `hand · ${round.hand.length} cards`}`
+    : firstFive ? "Your first five cards" : `Your hand · ${round.hand.length} cards`;
   const leadSuit = round.trick[0]?.card.suit;
   const hasLead = leadSuit && round.hand.some((card) => card.suit === leadSuit);
   const sorted = [...round.hand].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || a.value - b.value);
@@ -159,12 +405,13 @@ function renderHand() {
     const dealt = !previousHandIds.has(card.id);
     return cardHtml(card, { playable, disabled: !playable, rotate, arc, dealt });
   }).join("");
-  // Keep each card readable. On a phone the hand scrolls horizontally rather
-  // than squeezing thirteen cards into a few pixels each.
-  hand.style.width = "100%";
-  hand.style.maxWidth = "760px";
+  hand.style.removeProperty("width");
+  hand.style.removeProperty("max-width");
+  hand.style.setProperty("--hand-card-count", String(sorted.length));
+  hand.dataset.cardCount = String(sorted.length);
   hand.querySelectorAll(".card").forEach((card, index) => {
     card.style.zIndex = index + 1;
+    card.style.setProperty("--card-index", String(index));
     if (card.classList.contains("dealt")) card.style.animationDelay = `${index * 45}ms`;
   });
   previousHandIds = new Set(sorted.map((card) => card.id));
@@ -187,13 +434,280 @@ function renderTrick() {
   }).join("") + (resolved ? `<div class="trick-winner">${state.players[state.round.pendingWinner].name} takes it</div>` : "");
 }
 
+function renderTeamPicker() {
+  const teamA = $("#team-a-button");
+  const teamB = $("#team-b-button");
+  if (!teamA && !teamB) return;
+  const currentTeam = isSpectator() ? null : state.players[state.you.seat]?.team;
+  [[teamA, 0], [teamB, 1]].forEach(([button, team]) => {
+    if (!button) return;
+    const selected = currentTeam === team;
+    button.classList.toggle("selected", selected);
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = isSpectator() || Boolean(state.round);
+    button.onclick = () => emit("choose_team", { team }).catch((error) => setError(gameError, error));
+  });
+}
+
+function renderAvatarPicker() {
+  const available = state.options?.avatarIds || avatarIds;
+  const current = !isSpectator() ? normalizeAvatarId(state.players[state.you.seat]?.avatarId) : selectedRoomAvatar;
+  if (!isSpectator()) saveAvatarSelection(current);
+  const canChoose = !isSpectator() && !state.round;
+  document.querySelectorAll('input[name="room-avatar"]').forEach((input) => {
+    input.checked = input.value === current;
+    input.disabled = !canChoose || !available.includes(input.value);
+    input.onchange = () => {
+      if (!input.checked || !canChoose) return;
+      const nextAvatar = saveAvatarSelection(input.value);
+      emit("choose_avatar", { avatarId: nextAvatar }).catch((error) => {
+        syncAvatarRadios("room-avatar", current, !canChoose, available);
+        saveAvatarSelection(current);
+        setError(gameError, error);
+      });
+    };
+  });
+}
+
+function lobbySettingsPayload() {
+  const deckSelect = $("#deck-size");
+  const modeSelect = $("#game-mode");
+  const auctionControl = $("#auction-mode");
+  return {
+    deckSize: Number(deckSelect?.value || state.settings.deckSize),
+    mode: modeSelect?.value || state.settings.mode,
+    tableTheme: selectedTheme("table-theme", state.tableTheme),
+    auctionMode: readAuctionMode(auctionControl, state.settings.auctionMode)
+  };
+}
+
+function updateLobbySettings() {
+  if (!state || state.round || isSpectator() || state.you.seat !== state.hostSeat) return;
+  const updates = lobbySettingsPayload();
+  applyTableTheme(updates.tableTheme);
+  emit("update_settings", updates).catch((error) => {
+    applyTableTheme(state.tableTheme);
+    syncThemeRadios("table-theme", state.tableTheme);
+    setError(gameError, error);
+  });
+}
+
+function renderLobbySettings(host) {
+  const deckSelect = $("#deck-size");
+  const modeSelect = $("#game-mode");
+  const auctionControl = $("#auction-mode");
+  if (deckSelect) {
+    const deckSizes = state.options?.deckSizes || [state.settings.deckSize];
+    deckSelect.innerHTML = deckSizes.map((size) => `<option value="${size}" ${size === state.settings.deckSize ? "selected" : ""}>${size} cards · ${size / 4} each</option>`).join("");
+    deckSelect.disabled = !host;
+    deckSelect.onchange = updateLobbySettings;
+  }
+  if (modeSelect) {
+    modeSelect.value = state.settings.mode;
+    modeSelect.disabled = !host;
+    modeSelect.onchange = updateLobbySettings;
+  }
+  if (auctionControl) {
+    if (auctionControl.type === "checkbox" || auctionControl.type === "radio") auctionControl.checked = Boolean(state.settings.auctionMode);
+    else auctionControl.value = String(Boolean(state.settings.auctionMode));
+    auctionControl.disabled = !host;
+    auctionControl.onchange = updateLobbySettings;
+  }
+
+  const availableThemes = state.options?.tableThemes || tableThemes;
+  document.querySelectorAll('input[name="table-theme"]').forEach((input) => {
+    input.checked = input.value === state.tableTheme;
+    input.disabled = !host || !availableThemes.includes(input.value);
+    input.onchange = () => {
+      if (!input.checked) return;
+      applyTableTheme(input.value);
+      updateLobbySettings();
+    };
+  });
+}
+
+function readBidValue(element) {
+  if (!element) return pendingBidValue;
+  return Number("value" in element ? element.value : element.textContent);
+}
+
+function writeBidValue(element, value) {
+  if (!element) return;
+  if ("value" in element) element.value = String(value);
+  else element.textContent = String(value);
+}
+
+function clampBid(value, minimum, maximum) {
+  const numeric = Number(value);
+  return Math.max(minimum, Math.min(maximum, Number.isFinite(numeric) ? Math.round(numeric) : minimum));
+}
+
+function renderBiddingPanel() {
+  const round = state.round;
+  const bid = round?.bidState;
+  const panel = $("#auction-panel");
+  if (!panel || !bid) return;
+
+  const title = $("#auction-title");
+  const contract = $("#auction-contract");
+  const status = $("#bid-status");
+  const history = $("#bid-history");
+  const bidControls = $("#auction-bid-controls");
+  const decisionPanel = $("#auction-decision");
+  const decisionTitle = $("#auction-decision-title");
+  const decisionCopy = $("#auction-decision-copy");
+  const keep = $("#keep-auction-button");
+  const give = $("#give-auction-button");
+  const value = $("#bid-value");
+  const decrease = $("#bid-decrease");
+  const increase = $("#bid-increase");
+  const place = $("#place-bid-button");
+  const pass = $("#pass-bid-button");
+  const deciding = round.phase === "auction_decision";
+  const turnName = bid.turn === null ? "Auction complete" : state.players[bid.turn]?.name || "Player";
+  const bidderName = bid.highestBidder === null ? "No bidder yet" : state.players[bid.highestBidder]?.name || "Player";
+  const decisionName = bid.decisionSeat === null ? "Original caller" : state.players[bid.decisionSeat]?.name || "Original caller";
+  const highest = bid.highestBid === null ? `Opening bid ${bid.minimumBid}` : `High bid ${bid.highestBid} · ${bidderName}`;
+  const yourTurn = Boolean(bid.canBid || bid.canPass);
+  const contractBid = bid.contractBid ?? bid.highestBid;
+  const contractLabel = Number.isFinite(Number(contractBid)) ? String(contractBid) : "the high bid";
+  if (title) title.textContent = deciding ? "Who keeps the hukum?" : "Bid for the contract";
+  if (contract) contract.textContent = contractBid === null ? "Open" : `${contractBid} tricks`;
+  if (status) {
+    status.textContent = deciding
+      ? bid.canDecide
+        ? `${bidderName} leads at ${contractLabel} · Your decision`
+        : `Waiting for ${decisionName} · ${bidderName} leads at ${contractLabel}`
+      : `${highest} · ${yourTurn ? "Your turn" : `Waiting for ${turnName}`}`;
+  }
+
+  if (history) {
+    history.replaceChildren();
+    const entries = bid.history || [];
+    if (!entries.length) {
+      history.appendChild(Object.assign(document.createElement("li"), { className: "bid-history-empty", textContent: "No bids yet" }));
+    } else {
+      entries.forEach((entry) => {
+        const player = state.players[entry.seat]?.name || `Seat ${entry.seat + 1}`;
+        const text = entry.action === "pass"
+          ? `${player} passed`
+          : entry.action === "forced_bid"
+            ? `${player} opened at ${entry.bid}`
+            : entry.action === "keep"
+              ? `${player} kept hukum at ${entry.bid}`
+              : entry.action === "give"
+                ? `${player} gave the contract`
+                : `${player} bid ${entry.bid}`;
+        history.appendChild(Object.assign(document.createElement("li"), { textContent: text }));
+      });
+    }
+  }
+
+  bidControls?.classList.toggle("hidden", deciding);
+  decisionPanel?.classList.toggle("hidden", !deciding);
+  if (deciding) {
+    if (decisionTitle) {
+      decisionTitle.textContent = bid.canDecide
+        ? "Keep Hukum or give it away?"
+        : `${decisionName} must keep or give`;
+    }
+    if (decisionCopy) {
+      decisionCopy.textContent = bid.canDecide
+        ? `Keep Hukum matches ${bidderName}'s ${contractLabel}-trick bid for your team. Give transfers both the contract and hukum choice to ${bidderName}.`
+        : `${decisionName} can match the ${contractLabel}-trick bid to keep hukum, or give the contract and hukum choice to ${bidderName}.`;
+    }
+    if (keep) {
+      keep.textContent = `Keep Hukum · Match ${contractLabel}`;
+      keep.disabled = !bid.canKeep;
+      keep.onclick = async () => {
+        keep.disabled = true;
+        if (give) give.disabled = true;
+        try { await emit("decide_auction", { decision: "keep" }); }
+        catch (error) {
+          setError(gameError, error);
+          keep.disabled = !bid.canKeep;
+          if (give) give.disabled = !bid.canGive;
+        }
+      };
+    }
+    if (give) {
+      give.textContent = `Give to ${bidderName}`;
+      give.setAttribute("aria-label", `Give hukum to highest bidder ${bidderName}`);
+      give.disabled = !bid.canGive;
+      give.onclick = async () => {
+        give.disabled = true;
+        if (keep) keep.disabled = true;
+        try { await emit("decide_auction", { decision: "give" }); }
+        catch (error) {
+          setError(gameError, error);
+          give.disabled = !bid.canGive;
+          if (keep) keep.disabled = !bid.canKeep;
+        }
+      };
+    }
+    return;
+  }
+
+  if (keep) keep.onclick = null;
+  if (give) give.onclick = null;
+  const minimum = Number(bid.nextMinimumBid ?? bid.minimumBid);
+  const maximum = Number(bid.maximumBid);
+  const key = `${state.code}:${round.dealer}:${bid.turn}:${bid.history?.length || 0}:${minimum}:${maximum}`;
+  if (pendingBidKey !== key) {
+    pendingBidKey = key;
+    pendingBidValue = clampBid(minimum, minimum, maximum);
+  } else pendingBidValue = clampBid(readBidValue(value), minimum, maximum);
+  writeBidValue(value, pendingBidValue);
+  if (value && "min" in value) value.min = String(minimum);
+  if (value && "max" in value) value.max = String(maximum);
+  if (value && "disabled" in value) value.disabled = !bid.canBid;
+
+  const updateButtons = () => {
+    writeBidValue(value, pendingBidValue);
+    if (decrease) decrease.disabled = !bid.canBid || pendingBidValue <= minimum;
+    if (increase) increase.disabled = !bid.canBid || pendingBidValue >= maximum;
+    if (place) place.disabled = !bid.canBid;
+    if (pass) pass.disabled = !bid.canPass;
+  };
+  if (value && "onchange" in value) value.onchange = () => {
+    pendingBidValue = clampBid(readBidValue(value), minimum, maximum);
+    updateButtons();
+  };
+  if (decrease) decrease.onclick = () => {
+    pendingBidValue = clampBid(pendingBidValue - 1, minimum, maximum);
+    updateButtons();
+  };
+  if (increase) increase.onclick = () => {
+    pendingBidValue = clampBid(pendingBidValue + 1, minimum, maximum);
+    updateButtons();
+  };
+  if (place) place.onclick = async () => {
+    pendingBidValue = clampBid(readBidValue(value), minimum, maximum);
+    writeBidValue(value, pendingBidValue);
+    place.disabled = true;
+    try { await emit("place_bid", { bid: pendingBidValue }); }
+    catch (error) { setError(gameError, error); updateButtons(); }
+  };
+  if (pass) pass.onclick = async () => {
+    pass.disabled = true;
+    try { await emit("pass_bid"); }
+    catch (error) { setError(gameError, error); updateButtons(); }
+  };
+  updateButtons();
+}
+
 function renderPanels() {
   const lobby = $("#lobby-panel");
   const trump = $("#trump-panel");
   const result = $("#round-panel");
+  const auction = $("#auction-panel");
   lobby.classList.toggle("hidden", Boolean(state.round) || isSpectator());
   trump.classList.add("hidden");
   result.classList.add("hidden");
+  auction?.classList.add("hidden");
+  renderTeamPicker();
+  renderAvatarPicker();
 
   if (!state.round && !isSpectator()) {
     const count = state.players.filter(Boolean).length;
@@ -203,15 +717,11 @@ function renderPanels() {
     $("#lobby-note").textContent = `${count}/4 seats ready${botCount ? ` · ${botCount} bot${botCount > 1 ? "s" : ""}` : ""}${state.you.seat === state.hostSeat ? " — you are the host" : ""}`;
     const host = state.you.seat === state.hostSeat;
     $("#fill-bots-button").classList.toggle("hidden", !host || count === 4);
-    const deckSelect = $("#deck-size");
-    deckSelect.innerHTML = state.options.deckSizes.map((size) => `<option value="${size}" ${size === state.settings.deckSize ? "selected" : ""}>${size} cards · ${size / 4} each</option>`).join("");
-    $("#game-mode").value = state.settings.mode;
-    deckSelect.disabled = !host;
-    $("#game-mode").disabled = !host;
-    const updateSettings = () => emit("update_settings", { deckSize: deckSelect.value, mode: $("#game-mode").value }).catch((error) => setError(gameError, error));
-    deckSelect.onchange = updateSettings;
-    $("#game-mode").onchange = updateSettings;
-  } else if (!isSpectator() && state.round.phase === "choosing_trump" && state.round.caller === state.you.seat) {
+    renderLobbySettings(host);
+  } else if (state.round && ["bidding", "auction_decision"].includes(state.round.phase)) {
+    auction?.classList.remove("hidden");
+    renderBiddingPanel();
+  } else if (!isSpectator() && state.round?.phase === "choosing_trump" && state.round.caller === state.you.seat) {
     trump.classList.remove("hidden");
     const hidden = state.round.mode === "hidden";
     $("#trump-help").textContent = hidden ? "Tap one of your five cards. Its suit stays secret." : "Pick a suit after seeing your first five cards.";
@@ -221,11 +731,14 @@ function renderPanels() {
       $("#suit-buttons").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => emit("choose_trump", { suit: button.dataset.suit }).catch((error) => setError(gameError, error))));
     }
     $("#pass-button").classList.toggle("hidden", !state.round.canPass);
-  } else if (state.round.phase === "round_over") {
+  } else if (state.round?.phase === "round_over") {
     result.classList.remove("hidden");
     const won = !isSpectator() && state.round.winner === state.players[state.you.seat].team;
     const matchDone = state.matchWinner !== null;
-    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Tricks ${state.round.tricks[0]}–${state.round.tricks[1]} · Match ${state.score[0]}–${state.score[1]}`;
+    const contract = state.round.bidState?.contractBid
+      ? `<br><span class="contract-result ${state.round.bidState.contractMade ? "made" : "failed"}">Team ${state.round.bidState.contractTeam ? "B" : "A"} contract ${state.round.bidState.contractBid} · ${state.round.bidState.contractMade ? "MADE" : "FAILED"}</span>`
+      : "";
+    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Tricks ${state.round.tricks[0]}–${state.round.tricks[1]} · Match ${state.score[0]}–${state.score[1]}${contract}`;
     $("#next-button").classList.toggle("hidden", isSpectator() || state.you.seat !== state.hostSeat);
     $("#next-button").textContent = matchDone ? "Start new match" : "Deal next round";
   }
@@ -261,6 +774,17 @@ function renderTimer() {
 function renderStatus() {
   let text = "Waiting for players";
   const round = state.round;
+  if (round?.phase === "bidding") {
+    const bidder = round.bidState?.turn === null ? null : state.players[round.bidState?.turn];
+    text = round.bidState?.canBid || round.bidState?.canPass ? "Your bid" : `${bidder?.name || "Player"} is bidding`;
+  }
+  if (round?.phase === "auction_decision") {
+    const decider = state.players[round.bidState?.decisionSeat];
+    const bidder = state.players[round.bidState?.highestBidder];
+    text = round.bidState?.canDecide
+      ? "Your call: keep or give hukum"
+      : `${decider?.name || "Original caller"} decides on ${bidder?.name || "the highest bidder"}'s bid`;
+  }
   if (round?.phase === "choosing_trump") text = !isSpectator() && round.caller === state.you.seat ? "Choose the hukum" : `${state.players[round.caller].name} is choosing hukum`;
   if (round?.phase === "playing") text = `${round.mode === "double" ? `Double Sir · ${round.pool} pooled · ` : round.mode === "hidden" ? `Hidden Sir · ${round.pool} pooled · ` : ""}${!isSpectator() && round.turn === state.you.seat ? "Your turn" : `${state.players[round.turn].name}'s turn`}`;
   if (round?.phase === "trick_complete") text = `${state.players[round.pendingWinner].name} won the trick`;
@@ -268,30 +792,98 @@ function renderStatus() {
   $("#status").textContent = text;
 }
 
-function runGameMotion() {
-  if (!previousState?.round || !state?.round) return;
-  const oldTrick = new Set((previousState.round.trick || []).map((play) => play.card.id));
-  const newlyPlayed = (state.round.trick || []).find((play) => !oldTrick.has(play.card.id));
-  if (newlyPlayed && window.gsap) {
-    const card = document.querySelector(`.played-card[data-card="${newlyPlayed.card.id}"]`);
-    if (card) gsap.fromTo(card, { scale: 0.42, rotation: newlyPlayed.seat % 2 ? -18 : 18, filter: "brightness(1.75)" }, { scale: 1, rotation: 0, filter: "brightness(1)", duration: 0.46, ease: "back.out(2)" });
+function viewerTeam() {
+  return state.players[perspectiveSeat()]?.team;
+}
+
+function isLocalTeam(team) {
+  return team === viewerTeam();
+}
+
+function visibleWinningPlay(plays, trump) {
+  if (!plays.length) return null;
+  const leadSuit = plays[0].card.suit;
+  return plays.reduce((winner, play) => {
+    const score = (candidate) => {
+      if (trump && candidate.card.suit === trump) return 200 + candidate.card.value;
+      if (candidate.card.suit === leadSuit) return 100 + candidate.card.value;
+      return candidate.card.value;
+    };
+    return score(play) > score(winner) ? play : winner;
+  });
+}
+
+function runGameEffects() {
+  const effects = initializeEffects();
+  if (!previousState?.round || !state?.round) {
+    if (state?.round && !previousState?.round) resetEffectStreaks(false);
+    return;
   }
-  const winner = state.round.collectedBySeat?.findIndex((count, seat) => count > (previousState.round.collectedBySeat?.[seat] || 0));
-  if (winner < 0) return;
-  const name = state.players[winner]?.name || "Player";
-  const layer = $("#motion-layer");
-  layer.innerHTML = `<div class="capture-callout">${name}<span>TRICK TAKEN</span></div>`;
-  const callout = layer.firstElementChild;
-  if (window.gsap) gsap.fromTo(callout, { y: 18, scale: 0.72, autoAlpha: 0 }, { y: -22, scale: 1, autoAlpha: 1, duration: 0.35, ease: "back.out(2)", onComplete: () => gsap.to(callout, { autoAlpha: 0, y: -42, duration: 0.45, delay: 0.55 }) });
-  if (window.confetti) {
-    const table = document.querySelector(".table").getBoundingClientRect();
-    const relative = relativeSeat(winner);
-    const points = [[.5, .72], [.2, .5], [.5, .25], [.8, .5]];
-    confetti({ particleCount: 38, spread: 54, startVelocity: 20, scalar: .75, colors: ["#ffe36b", "#f6b83d", "#fff5cf", "#63e6be"], origin: { x: (table.left + table.width * points[relative][0]) / innerWidth, y: (table.top + table.height * points[relative][1]) / innerHeight } });
+
+  if (state.round.dealer !== previousState.round.dealer) resetEffectStreaks(false);
+  if (previousState.matchWinner !== null && state.matchWinner === null) resetEffectStreaks();
+
+  const previousTrick = previousState.round.trick || [];
+  const previousCards = new Set(previousTrick.map((play) => play.card.id));
+  const newlyPlayed = (state.round.trick || []).find((play) => !previousCards.has(play.card.id));
+  if (newlyPlayed) {
+    const card = document.querySelector(`.played-card[data-card="${newlyPlayed.card.id}"]`);
+    if (card && window.gsap) {
+      try {
+        gsap.fromTo(card,
+          { scale: 0.42, rotation: newlyPlayed.seat % 2 ? -18 : 18, filter: "brightness(1.75)" },
+          { scale: 1, rotation: 0, filter: "brightness(1)", duration: 0.46, ease: "back.out(2)" }
+        );
+      } catch (_) { /* Card play remains functional without motion. */ }
+    }
+
+    const team = state.players[newlyPlayed.seat]?.team;
+    effects?.onCardPlay?.({ element: card, team, isLocal: isLocalTeam(team) });
+    const leadSuit = state.round.trick[0]?.card.suit;
+    const trump = state.round.trump;
+    const winningPlay = visibleWinningPlay(state.round.trick, trump);
+    const isTrumpCut = previousTrick.length > 0
+      && Boolean(trump)
+      && leadSuit !== trump
+      && newlyPlayed.card.suit === trump
+      && winningPlay?.card.id === newlyPlayed.card.id;
+    if (isTrumpCut) {
+      const aceCut = previousTrick.some((play) => play.card.rank === "A"
+        && play.card.suit === leadSuit
+        && state.players[play.seat]?.team !== team);
+      const streak = effectStreaks.trick.team === team ? Math.max(1, effectStreaks.trick.count) : 1;
+      effects?.onTrumpCut?.({ aceCut, element: card, team, isLocal: isLocalTeam(team), streak });
+    }
+  }
+
+  const winnerSeat = state.round.collectedBySeat?.findIndex((count, seat) => count > (previousState.round.collectedBySeat?.[seat] || 0)) ?? -1;
+  const roundJustFinished = previousState.round.phase !== "round_over" && state.round.phase === "round_over";
+  if (roundJustFinished) {
+    const team = state.round.winner;
+    const streak = nextEffectStreak("round", team);
+    const payload = { team, isLocal: isLocalTeam(team), streak, court: Boolean(state.round.court), element: $(".table") };
+    const matchJustFinished = state.matchWinner !== null && state.matchWinner !== previousState.matchWinner;
+    if (matchJustFinished) effects?.onMatchWin?.(payload);
+    else effects?.onRoundWin?.(payload);
+    if (winnerSeat >= 0) nextEffectStreak("trick", state.players[winnerSeat]?.team);
+    return;
+  }
+
+  if (winnerSeat >= 0) {
+    const team = state.players[winnerSeat]?.team;
+    const streak = nextEffectStreak("trick", team);
+    effects?.onTrickWin?.({
+      team,
+      isLocal: isLocalTeam(team),
+      streak,
+      element: $(`#seat-${relativeSeat(winnerSeat)}`)
+    });
   }
 }
 
 function render() {
+  applyTableTheme(state.tableTheme);
+  syncThemeRadios("table-theme", state.tableTheme, isSpectator() || Boolean(state.round) || state.you.seat !== state.hostSeat);
   home.classList.add("hidden");
   game.classList.remove("hidden");
   $("#copy-code").textContent = state.code;
@@ -309,7 +901,7 @@ function render() {
   trump.textContent = state.round?.trump ? `Hukum ${symbols[state.round.trump]}` : "";
   trump.classList.toggle("red", ["hearts", "diamonds"].includes(state.round?.trump));
   const dealScore = $("#deal-score");
-  dealScore.classList.toggle("hidden", !state.round || state.round.phase === "choosing_trump");
+  dealScore.classList.toggle("hidden", !state.round || ["choosing_trump", "bidding", "auction_decision"].includes(state.round.phase));
   if (state.round) dealScore.textContent = `TRICKS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`;
   $("#center-deck").classList.toggle("hidden", !state.round);
   const spectatorBar = $("#spectator-bar");
@@ -324,17 +916,23 @@ function render() {
   renderPanels();
   renderStatus();
   renderTimer();
-  runGameMotion();
+  runGameEffects();
 }
 
 socket.on("room_state", (nextState) => {
   previousState = state;
   state = nextState;
+  applyTableTheme(state.tableTheme);
   render();
   requestAnimationFrame(() => window.scrollTo(0, 0));
 });
 window.addEventListener("resize", () => { if (state) renderHand(); });
 setInterval(renderTimer, 250);
+applyTableTheme(createTableTheme);
+bindOptionalControls();
+initializeEffects();
+document.addEventListener("pointerdown", unlockEffectsAudio, true);
+document.addEventListener("keydown", unlockEffectsAudio, true);
 socket.on("connect", async () => {
   const queryCode = new URLSearchParams(location.search).get("room")?.toUpperCase();
   if (storedSession?.token && (!queryCode || queryCode === storedSession.code)) {
