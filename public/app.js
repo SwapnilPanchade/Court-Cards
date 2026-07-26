@@ -9,6 +9,10 @@ const suitOrder = { clubs: 0, diamonds: 1, hearts: 2, spades: 3 };
 let state = null;
 let previousState = null;
 let previousHandIds = new Set();
+let handAutoSlideKey = "";
+let firstFiveScrollKey = "";
+let lastManualHandScrollAt = 0;
+let programmaticHandScrollUntil = 0;
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
 const tableThemes = ["noir", "comic", "neon", "adda", "gully"];
 const avatarIds = ["kadki-king", "chai-champion", "jugaadu", "sher", "filmy-villain", "office-babu", "cool-aunty", "biker-didi", "glam-queen", "bollywood-boss"];
@@ -332,6 +336,68 @@ function cardHtml(card, options = {}) {
   </button>`;
 }
 
+function bindHandScrollTracking(hand) {
+  if (hand.dataset.scrollTracking === "true") return;
+  const markManualScroll = () => { lastManualHandScrollAt = Date.now(); };
+  hand.addEventListener("pointerdown", markManualScroll, { passive: true });
+  hand.addEventListener("touchstart", markManualScroll, { passive: true });
+  hand.addEventListener("wheel", markManualScroll, { passive: true });
+  hand.addEventListener("scroll", () => {
+    if (Date.now() > programmaticHandScrollUntil) markManualScroll();
+  }, { passive: true });
+  hand.dataset.scrollTracking = "true";
+}
+
+function scrollHandTo(hand, left, smooth = false) {
+  const target = Math.max(0, Math.min(left, Math.max(0, hand.scrollWidth - hand.clientWidth)));
+  programmaticHandScrollUntil = Date.now() + (smooth ? 700 : 120);
+  try {
+    hand.scrollTo({ left: target, behavior: smooth ? "smooth" : "auto" });
+  } catch (_) {
+    hand.scrollLeft = target;
+  }
+}
+
+function autoPositionHand(hand, round, sorted, firstFive, leadSuit, hasLead) {
+  bindHandScrollTracking(hand);
+
+  const firstDealKey = firstFive && sorted.length === 5
+    ? `${state.code}:${round.dealer}:${perspectiveSeat()}`
+    : "";
+  if (firstDealKey && firstDealKey !== firstFiveScrollKey) {
+    firstFiveScrollKey = firstDealKey;
+    scrollHandTo(hand, 0);
+  }
+
+  const completedTricks = (round.collectedBySeat || []).reduce((total, count) => total + count, 0);
+  const leadWasPlayedByViewer = round.trick[0]?.seat === perspectiveSeat();
+  const slideKey = leadSuit && hasLead && !leadWasPlayedByViewer
+    ? `${state.code}:${round.dealer}:${completedTricks}:${perspectiveSeat()}:${leadSuit}`
+    : "";
+  if (!slideKey || slideKey === handAutoSlideKey) return;
+  handAutoSlideKey = slideKey;
+
+  // A swipe/wheel already in progress wins over automation for this trick.
+  if (Date.now() - lastManualHandScrollAt < 800) return;
+  const targetCard = sorted.find((card) => card.suit === leadSuit);
+  if (!targetCard) return;
+
+  requestAnimationFrame(() => {
+    if (handAutoSlideKey !== slideKey || !hand.isConnected) return;
+    const target = Array.from(hand.querySelectorAll("[data-card]"))
+      .find((card) => card.dataset.card === targetCard.id);
+    if (!target) return;
+    const leftEdge = target.offsetLeft;
+    const rightEdge = leftEdge + target.offsetWidth;
+    const visibleLeft = hand.scrollLeft;
+    const visibleRight = visibleLeft + hand.clientWidth;
+    if (leftEdge >= visibleLeft && rightEdge <= visibleRight) return;
+    const centeredLeft = leftEdge - (hand.clientWidth - target.offsetWidth) / 2;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    scrollHandTo(hand, centeredLeft, !reducedMotion);
+  });
+}
+
 function isSpectator() {
   return state?.you?.role === "spectator";
 }
@@ -382,6 +448,9 @@ function renderHand() {
     delete hand.dataset.cardCount;
     label.classList.add("hidden");
     previousHandIds = new Set();
+    handAutoSlideKey = "";
+    firstFiveScrollKey = "";
+    lastManualHandScrollAt = 0;
     return;
   }
   label.classList.remove("hidden");
@@ -394,14 +463,14 @@ function renderHand() {
   const hasLead = leadSuit && round.hand.some((card) => card.suit === leadSuit);
   const sorted = [...round.hand].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || a.value - b.value);
   const mid = (sorted.length - 1) / 2;
-  const angleStep = sorted.length > 1 ? Math.min(3.2, 26 / (sorted.length - 1)) : 0;
+  const angleStep = sorted.length > 1 ? Math.min(1.5, 12 / (sorted.length - 1)) : 0;
   hand.innerHTML = sorted.map((card, index) => {
     const legal = round.phase !== "playing" || !leadSuit || card.suit === leadSuit || !hasLead;
     const hiddenChoice = !isSpectator() && round.phase === "choosing_trump" && round.mode === "hidden" && round.caller === state.you.seat;
     const playable = !isSpectator() && (hiddenChoice || (round.phase === "playing" && round.turn === state.you.seat && legal));
     const offset = index - mid;
     const rotate = Math.round(offset * angleStep * 10) / 10;
-    const arc = Math.round(Math.abs(offset) * Math.abs(offset) * 0.6);
+    const arc = -Math.round(Math.abs(offset) * Math.abs(offset) * 0.2);
     const dealt = !previousHandIds.has(card.id);
     return cardHtml(card, { playable, disabled: !playable, rotate, arc, dealt });
   }).join("");
@@ -414,6 +483,7 @@ function renderHand() {
     card.style.setProperty("--card-index", String(index));
     if (card.classList.contains("dealt")) card.style.animationDelay = `${index * 45}ms`;
   });
+  autoPositionHand(hand, round, sorted, firstFive, leadSuit, hasLead);
   previousHandIds = new Set(sorted.map((card) => card.id));
   hand.querySelectorAll("[data-card]").forEach((card) => card.addEventListener("click", () => {
     card.blur();
@@ -735,10 +805,14 @@ function renderPanels() {
     result.classList.remove("hidden");
     const won = !isSpectator() && state.round.winner === state.players[state.you.seat].team;
     const matchDone = state.matchWinner !== null;
+    const wonTricks = state.round.wonTricks || state.round.tricks;
+    const sirScore = state.round.mode === "single"
+      ? ""
+      : ` · Round score ${state.round.tricks[0]}–${state.round.tricks[1]}`;
     const contract = state.round.bidState?.contractBid
       ? `<br><span class="contract-result ${state.round.bidState.contractMade ? "made" : "failed"}">Team ${state.round.bidState.contractTeam ? "B" : "A"} contract ${state.round.bidState.contractBid} · ${state.round.bidState.contractMade ? "MADE" : "FAILED"}</span>`
       : "";
-    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Tricks ${state.round.tricks[0]}–${state.round.tricks[1]} · Match ${state.score[0]}–${state.score[1]}${contract}`;
+    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Won tricks ${wonTricks[0]}–${wonTricks[1]}${sirScore} · Match ${state.score[0]}–${state.score[1]}${contract}`;
     $("#next-button").classList.toggle("hidden", isSpectator() || state.you.seat !== state.hostSeat);
     $("#next-button").textContent = matchDone ? "Start new match" : "Deal next round";
   }
@@ -902,7 +976,16 @@ function render() {
   trump.classList.toggle("red", ["hearts", "diamonds"].includes(state.round?.trump));
   const dealScore = $("#deal-score");
   dealScore.classList.toggle("hidden", !state.round || ["choosing_trump", "bidding", "auction_decision"].includes(state.round.phase));
-  if (state.round) dealScore.textContent = `TRICKS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`;
+  if (state.round) {
+    const wonTricks = state.round.wonTricks || state.round.tricks;
+    const sirScore = state.round.mode === "single"
+      ? ""
+      : `  ·  ROUND ${state.round.tricks[0]}–${state.round.tricks[1]}`;
+    dealScore.textContent = `WON  A ${wonTricks[0]}  ·  ${wonTricks[1]} B${sirScore}`;
+    dealScore.title = state.round.mode === "single"
+      ? "Completed tricks won by each team"
+      : "WON counts raw trick wins; ROUND counts secured Double/Hidden Sir bundles";
+  }
   $("#center-deck").classList.toggle("hidden", !state.round);
   const spectatorBar = $("#spectator-bar");
   spectatorBar.classList.toggle("hidden", !isSpectator());

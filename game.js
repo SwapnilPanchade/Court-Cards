@@ -30,6 +30,14 @@ function teamForSeat(seat) {
   return seat % 2;
 }
 
+// Raw completed-trick wins. In Double/Hidden Sir this intentionally differs
+// from `round.tricks`, which only counts bundles after the Sir condition lands.
+function wonTricksByTeam(round) {
+  const collected = round?.collectedBySeat;
+  if (!Array.isArray(collected) || collected.length !== 4) throw new Error("Round trick collections are invalid.");
+  return [collected[0] + collected[2], collected[1] + collected[3]];
+}
+
 function canPlayCard(hand, card, leadSuit) {
   if (!card || !hand.some((item) => item.id === card.id)) return false;
   if (!leadSuit || card.suit === leadSuit) return true;
@@ -335,6 +343,7 @@ module.exports = {
   shuffle,
   dealHands,
   teamForSeat,
+  wonTricksByTeam,
   canPlayCard,
   winningPlay,
   createRound,

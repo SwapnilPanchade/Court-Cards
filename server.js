@@ -3,7 +3,7 @@ const crypto = require("node:crypto");
 const express = require("express");
 const { createServer } = require("node:http");
 const { Server } = require("socket.io");
-const { SUITS, DECK_SIZES, MODES, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick, teamForSeat } = require("./game");
+const { SUITS, DECK_SIZES, MODES, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick, teamForSeat, wonTricksByTeam } = require("./game");
 
 const app = express();
 const server = createServer(app);
@@ -214,6 +214,7 @@ function roomView(room, viewer) {
       pendingWinner: round.pendingWinner,
       trick: round.trick,
       tricks: round.tricks,
+      wonTricks: wonTricksByTeam(round),
       capturedBySeat: round.capturedBySeat,
       collectedBySeat: round.collectedBySeat,
       pool: round.pool,

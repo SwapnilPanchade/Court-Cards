@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } = require("../game");
+const { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick, wonTricksByTeam } = require("../game");
 const { TABLE_THEMES, AVATAR_IDS, roomView, updateRoomSettings, chooseRoomTeam, chooseRoomAvatar, recordRoundResult, assertMatchOpen } = require("../server");
 
 const card = (rank, suit, value) => ({ id: `${rank}-${suit}`, rank, suit, value });
@@ -80,6 +80,35 @@ test("single sir keeps playing after a majority until every card is played", () 
   collectTrick(round);
   assert.equal(round.phase, "playing");
   assert.equal(round.turn, 0);
+});
+
+test("auction single sir keeps raw won tricks equal to its score through the full deal", () => {
+  const round = createRound(3, { deckSize: 20, mode: "single", auctionMode: true }, () => 0.5);
+  [0, 1, 2, 3].forEach((seat) => passBid(round, seat));
+  chooseTrump(round, round.caller, "clubs");
+
+  const forceTrick = (winnerSeat, trickNumber) => {
+    const leader = round.turn;
+    round.hands = [0, 1, 2, 3].map((seat) => [card(`T${trickNumber}-${seat}`, "hearts", seat === winnerSeat ? 12 : seat)]);
+    [0, 1, 2, 3].forEach((offset) => {
+      const seat = (leader + offset) % 4;
+      playCard(round, seat, round.hands[seat][0].id);
+    });
+    collectTrick(round);
+    assert.deepEqual(round.tricks, wonTricksByTeam(round));
+  };
+
+  forceTrick(0, 1);
+  forceTrick(1, 2);
+  forceTrick(1, 3);
+  forceTrick(1, 4);
+  assert.equal(round.phase, "playing", "majority must not hide the final cards");
+  forceTrick(1, 5);
+
+  assert.equal(round.phase, "round_over");
+  assert.deepEqual(round.tricks, [1, 4]);
+  assert.deepEqual(wonTricksByTeam(round), [1, 4]);
+  assert.equal(round.completedTricks.length, round.cardsPerPlayer);
 });
 
 test("double sir collects the pool only for the same player's consecutive wins", () => {
@@ -328,6 +357,25 @@ test("room themes and auction mode are validated and exposed", () => {
   assert.equal(ownerView.round.bidState.canGive, true);
   assert.equal(bidderView.round.bidState.canDecide, false);
   assert.equal(bidderView.round.bidState.contractTeam, null);
+});
+
+test("room view separates raw won tricks from Double and Hidden Sir bundle scores", () => {
+  ["double", "hidden"].forEach((mode) => {
+    const room = testRoom([0, 1, 2, 3].map((seat) => ({
+      name: `P${seat}`,
+      token: `t${seat}`,
+      socketId: `s${seat}`
+    })));
+    room.round = createRound(3, { deckSize: 20, mode }, () => 0.5);
+    room.round.phase = "playing";
+    room.round.tricks = [0, 0];
+    room.round.collectedBySeat = [1, 0, 2, 0];
+    room.round.pool = 3;
+
+    const view = roomView(room, { role: "player", seat: 0 });
+    assert.deepEqual(view.round.wonTricks, [3, 0]);
+    assert.deepEqual(view.round.tricks, [0, 0]);
+  });
 });
 
 test("team choice prefers an empty seat, can replace a bot, and rejects a full human team", () => {
