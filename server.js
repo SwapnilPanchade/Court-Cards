@@ -10,6 +10,10 @@ const server = createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const TURN_TIMEOUT_MS = Math.max(100, Number(process.env.TURN_TIMEOUT_MS) || 40_000);
+const MATCH_TARGET = Math.max(1, Number(process.env.MATCH_TARGET) || 4);
+const DEFAULT_DECK_SIZE = DECK_SIZES.includes(Number(process.env.DEFAULT_DECK_SIZE)) ? Number(process.env.DEFAULT_DECK_SIZE) : 36;
+const DEFAULT_MODE = MODES.includes(process.env.DEFAULT_MODE) ? process.env.DEFAULT_MODE : "single";
+const BOT_ACTION_DELAY_MS = Math.max(100, Number(process.env.BOT_ACTION_DELAY_MS) || 650);
 const rooms = new Map();
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -112,6 +116,7 @@ function finishCompletedTrick(room, round) {
   collectTrick(round);
   if (round.phase === "round_over") {
     room.score[round.winner] += 1;
+    if (room.score[round.winner] >= room.matchTarget) room.matchWinner = round.winner;
   }
   room.updatedAt = Date.now();
   scheduleTurn(room);
@@ -194,7 +199,7 @@ function scheduleBotAction(room) {
     if (round.phase === "trick_complete") scheduleCollection(room, round);
     else scheduleTurn(room);
     sendRoom(room);
-  }, 650);
+  }, BOT_ACTION_DELAY_MS);
 }
 
 function leaveCurrentSocket(socket) {
@@ -237,11 +242,11 @@ io.on("connection", (socket) => {
         dealer: 3,
         round: null,
         score: [0, 0],
-        matchTarget: 4,
+        matchTarget: MATCH_TARGET,
         matchWinner: null,
         restartVote: null,
         turnTimer: null,
-        settings: { deckSize: 36, mode: "single" },
+        settings: { deckSize: DEFAULT_DECK_SIZE, mode: DEFAULT_MODE },
         updatedAt: Date.now()
       };
       rooms.set(code, room);

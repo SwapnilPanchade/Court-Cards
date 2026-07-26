@@ -1,6 +1,13 @@
 # Court Piece Online
 
-A private-room, mobile-friendly Court Piece / Hokm game for four friends.
+A private-room, mobile-friendly Court Piece / Hokm game for friends or bots.
+
+## Highlights
+
+- Play with four friends, or fill any empty seats with server-controlled bots.
+- One Express + Socket.IO process serves both the frontend and the real-time game backend.
+- Host-configurable deck size and Sir mode in the lobby.
+- Responsive card table designed for mobile landscape, with a usable portrait fallback.
 
 ## Current rules
 
@@ -17,6 +24,7 @@ A private-room, mobile-friendly Court Piece / Hokm game for four friends.
 - Each turn has a server-authoritative 40-second timer. On timeout, the server plays a random legal card so the room never gets stuck.
 - Players can exit to the home screen or request a full match restart. A restart resets only after all four players accept.
 - Spectators can join an active room, choose one player to follow, and see that player's first five cards and full hand. Spectators are read-only and cannot play, choose hukum, change settings, or vote.
+- The host can fill all currently empty seats with bots. A friend joining before the game starts replaces a bot seat when no empty seat remains.
 - Dealer and hukum caller rotate for the next round.
 
 These rules live in `game.js`, so variants such as Double Sir or different Court scoring can be added without rewriting the UI.
@@ -31,6 +39,25 @@ npm start
 ```
 
 Open `http://localhost:3000`. For same-Wi-Fi play, friends can open `http://YOUR_LOCAL_IP:3000` while the server is running.
+
+## Configuration
+
+Lobby controls let the host set the deck size and game mode for each table. Deploy defaults can be changed with environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP/WebSocket listener port. Most hosts set this automatically. |
+| `TURN_TIMEOUT_MS` | `40000` | Maximum time for a human turn before a legal card is played automatically. |
+| `MATCH_TARGET` | `4` | Deals needed by a team to win a match. |
+| `DEFAULT_DECK_SIZE` | `36` | New-room deck size: `20`–`52`, in steps of four. |
+| `DEFAULT_MODE` | `single` | New-room mode: `single`, `double`, or `hidden`. |
+| `BOT_ACTION_DELAY_MS` | `650` | Pause before a bot chooses hukum or plays a card. |
+
+Example:
+
+```bash
+MATCH_TARGET=6 DEFAULT_MODE=hidden npm start
+```
 
 ## Share over the internet for free
 
@@ -54,17 +81,16 @@ Your Mac: Node server → in-memory rooms/game state
 
 ## Put it online
 
-Deploy this folder to any Node host (Render, Railway, Fly.io, or similar) with:
+Deploy this folder to any Node host that supports WebSockets. Render Free is the quickest first deployment:
 
-- Build command: `npm install`
+- Build command: `npm ci`
 - Start command: `npm start`
 - Health endpoint: `/health`
 
-The host must support WebSockets. Rooms currently live in server memory, which is suitable for one server instance and private friend games. A later production version should add Redis for multiple instances and persistent accounts/match history only if those features are needed.
+Render gives the service an HTTPS `onrender.com` URL, so a separate domain is optional. Its Free service sleeps after 15 idle minutes; the first visitor then waits for it to wake. Rooms currently live in server memory, so a restart clears active rooms. This is suitable for one server instance and private friend games. A later production version should add Redis only if persistent rooms or multiple servers are needed.
 
 ## Test
 
 ```bash
 npm test
 ```
-
