@@ -69,10 +69,10 @@ MATCH_TARGET=6 DEFAULT_MODE=hidden npm start
 Keep the game server running, then open a second terminal:
 
 ```bash
-cloudflared tunnel --url http://127.0.0.1:3000 --protocol http2 --no-autoupdate
+cloudflared tunnel --url http://127.0.0.1:28080 --protocol http2 --no-autoupdate
 ```
 
-`--protocol http2` forces TCP instead of QUIC. Use it if you see `Failed to dial a quic connection` / Cloudflare Error 1033 (common when the network blocks UDP 7844).
+`--protocol http2` forces TCP instead of QUIC. Use it if you see `Failed to dial a quic connection` / Cloudflare Error 1033 (common when the network blocks UDP 7844). Wait until the terminal prints `Registered tunnel connection` before opening the link — opening earlier also shows Error 1033.
 
 Share the generated `https://...trycloudflare.com` link. This temporary link is free and needs no Cloudflare account, but it changes each time and stops when either terminal closes or the computer sleeps.
 

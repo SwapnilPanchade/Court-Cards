@@ -8,7 +8,7 @@ const { SUITS, DECK_SIZES, MODES, createRound, placeBid, passBid, decideAuction,
 const app = express();
 const server = createServer(app);
 const io = new Server(server);
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 28080;
 const TURN_TIMEOUT_MS = Math.max(100, Number(process.env.TURN_TIMEOUT_MS) || 40_000);
 const MATCH_TARGET = Math.max(1, Number(process.env.MATCH_TARGET) || 4);
 const DEFAULT_DECK_SIZE = DECK_SIZES.includes(Number(process.env.DEFAULT_DECK_SIZE)) ? Number(process.env.DEFAULT_DECK_SIZE) : 36;
