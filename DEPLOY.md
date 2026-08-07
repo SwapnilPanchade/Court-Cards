@@ -26,7 +26,11 @@ Opens `wrangler dev` (usually http://127.0.0.1:8787).
 npm run deploy
 ```
 
-You get a `*.workers.dev` URL. Share that with friends — rooms are Durable Objects (one per room code).
+You get a public URL like:
+
+`https://court-piece.fucksaurya.workers.dev`
+
+Share that with friends — rooms are Durable Objects (one per room code).
 
 ## Health
 
