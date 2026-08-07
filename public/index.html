@@ -294,6 +294,15 @@
                 <button id="team-b-button" class="team-button team-button-b" type="button" data-team="1" aria-pressed="false"><span>B</span> Team B</button>
               </div>
             </div>
+
+            <div id="host-transfer-block" class="host-transfer-block hidden">
+              <div class="setting-title-row">
+                <span>Transfer host</span>
+                <small>Give table control to another player</small>
+              </div>
+              <select id="transfer-host-select" aria-label="Transfer host to"></select>
+              <button id="transfer-host-button" class="secondary" type="button">Make host</button>
+            </div>
           </div>
 
           <div class="lobby-actions">
@@ -303,6 +312,26 @@
           </div>
           <p id="lobby-note" class="hint"></p>
         </section>
+
+        <section id="team-switch-panel" class="panel team-switch-panel hidden">
+          <p class="eyebrow">Team switch</p>
+          <h2 id="team-switch-title">Switch teams?</h2>
+          <p id="team-switch-note"></p>
+          <div class="restart-actions">
+            <button id="decline-team-switch" class="secondary" type="button">Decline</button>
+            <button id="accept-team-switch" class="primary" type="button">Accept switch</button>
+          </div>
+        </section>
+
+        <div id="bot-picker" class="bot-picker hidden" role="dialog" aria-labelledby="bot-picker-title">
+          <div class="bot-picker-card">
+            <p class="eyebrow">Room is full of bots</p>
+            <h2 id="bot-picker-title">Replace a bot</h2>
+            <p class="panel-intro">Pick which seat you want to take.</p>
+            <div id="bot-picker-options" class="bot-picker-options"></div>
+            <button id="bot-picker-cancel" class="secondary" type="button">Cancel</button>
+          </div>
+        </div>
 
         <section id="trump-panel" class="panel trump-panel hidden">
           <p class="eyebrow">You saw five cards</p>
@@ -353,11 +382,11 @@
 
         <section id="restart-panel" class="panel restart-panel hidden">
           <p class="eyebrow">Restart request</p>
-          <h2 id="restart-title">Restart this match?</h2>
+          <h2 id="restart-title">Deal a fresh round?</h2>
           <p id="restart-note"></p>
           <div id="restart-actions" class="restart-actions">
             <button id="decline-restart" class="secondary">Decline</button>
-            <button id="accept-restart" class="primary">Accept restart</button>
+            <button id="accept-restart" class="primary">Accept</button>
           </div>
         </section>
 
@@ -368,7 +397,6 @@
     </main>
 
     <div id="toast" class="toast"></div>
-    <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="effects.js"></script>

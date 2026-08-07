@@ -1,4 +1,106 @@
-const socket = io();
+class GameSocket {
+  constructor() {
+    this.ws = null;
+    this.pending = new Map();
+    this.handlers = {};
+    this.msgId = 0;
+    this.roomCode = null;
+    this.opening = null;
+  }
+
+  on(event, handler) {
+    this.handlers[event] = handler;
+  }
+
+  wsUrl(code) {
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${location.host}/ws/${encodeURIComponent(code)}`;
+  }
+
+  connect(code) {
+    const normalized = String(code || "").trim().toUpperCase();
+    if (this.ws && this.roomCode === normalized && this.ws.readyState <= 1) {
+      return Promise.resolve();
+    }
+    this.close();
+    this.roomCode = normalized;
+    this.opening = new Promise((resolve, reject) => {
+      const ws = new WebSocket(this.wsUrl(normalized));
+      this.ws = ws;
+      ws.addEventListener("open", () => {
+        this.opening = null;
+        resolve();
+        this.handlers.connect?.();
+      });
+      ws.addEventListener("message", (event) => {
+        let data;
+        try { data = JSON.parse(event.data); } catch { return; }
+        if (data?.id !== undefined && this.pending.has(data.id)) {
+          const { resolve: done, reject: fail } = this.pending.get(data.id);
+          this.pending.delete(data.id);
+          if (data.ok) done(data);
+          else {
+            const error = new Error(data.error || "Request failed.");
+            if (data.code) error.code = data.code;
+            if (data.bots) error.bots = data.bots;
+            fail(error);
+          }
+          return;
+        }
+        if (data?.event && this.handlers[data.event]) this.handlers[data.event](data.payload);
+      });
+      ws.addEventListener("close", () => {
+        if (this.ws === ws) this.ws = null;
+      });
+      ws.addEventListener("error", () => {
+        if (this.opening) {
+          this.opening = null;
+          reject(new Error("Could not connect to the room."));
+        }
+      });
+    });
+    return this.opening;
+  }
+
+  close() {
+    if (this.ws) {
+      try { this.ws.close(); } catch (_) { /* ignore */ }
+    }
+    this.ws = null;
+    this.roomCode = null;
+    for (const { reject } of this.pending.values()) reject(new Error("Disconnected."));
+    this.pending.clear();
+  }
+
+  async emit(event, payload = {}) {
+    if (event === "create_room") {
+      const response = await fetch("/api/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || "Could not create room.");
+      await this.connect(data.code);
+      const joined = await this.emit("join_room", { code: data.code, token: data.token, name: payload.name, avatarId: payload.avatarId });
+      return { ...data, ...joined };
+    }
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      const code = payload.code || this.roomCode || storedSession?.code;
+      if (!code) throw new Error("Join a room first.");
+      await this.connect(code);
+    }
+
+    const id = String(++this.msgId);
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify({ id, event, payload }));
+    });
+  }
+}
+
+const socket = new GameSocket();
 const $ = (selector) => document.querySelector(selector);
 const home = $("#home");
 const game = $("#game");
@@ -225,9 +327,7 @@ async function unlockEffectsAudio() {
 }
 
 function emit(event, payload = {}) {
-  return new Promise((resolve, reject) => {
-    socket.emit(event, payload, (result) => result?.ok ? resolve(result) : reject(new Error(result?.error || "Request failed.")));
-  });
+  return socket.emit(event, payload);
 }
 
 function setError(element, error) {
@@ -253,22 +353,80 @@ async function enterRoom(kind) {
   const name = $("#name").value.trim();
   try {
     const avatarId = selectedAvatar("create-avatar", selectedRoomAvatar);
-    const result = kind === "create"
-      ? await emit("create_room", {
+    if (kind === "create") {
+      const result = await emit("create_room", {
         name,
         avatarId,
         tableTheme: selectedTheme("create-table-theme", createTableTheme),
         auctionMode: readAuctionMode($("#create-auction-mode") || $("#auction-mode"), false)
-      })
-      : await emit(kind === "spectator" ? "join_spectator" : "join_room", {
-        code: $("#room-code").value,
-        name,
-        ...(kind === "spectator" ? {} : { avatarId })
       });
-    if (kind === "create") saveCreateTheme(result.tableTheme || selectedTheme("create-table-theme", createTableTheme));
-    if (kind !== "spectator") saveAvatarSelection(result.avatarId || avatarId);
-    saveSession(result, name);
+      saveCreateTheme(result.tableTheme || selectedTheme("create-table-theme", createTableTheme));
+      saveAvatarSelection(result.avatarId || avatarId);
+      saveSession(result, name);
+      return;
+    }
+
+    const code = $("#room-code").value.trim().toUpperCase();
+    if (!code) throw new Error("Enter a room code.");
+
+    if (kind === "spectator") {
+      await socket.connect(code);
+      const result = await emit("join_spectator", { code, name });
+      saveSession(result, name);
+      return;
+    }
+
+    const infoResponse = await fetch(`/api/room/${encodeURIComponent(code)}`);
+    const info = await infoResponse.json().catch(() => null);
+    let replaceSeat;
+    if (info?.ok && !info.emptySeats?.length && info.bots?.length) {
+      replaceSeat = await pickBotSeat(info.bots);
+      if (replaceSeat === null) return;
+    }
+
+    await socket.connect(code);
+    try {
+      const result = await emit("join_room", { code, name, avatarId, replaceSeat });
+      saveAvatarSelection(result.avatarId || avatarId);
+      saveSession(result, name);
+    } catch (error) {
+      if (error.code === "CHOOSE_BOT" && error.bots?.length) {
+        const seat = await pickBotSeat(error.bots);
+        if (seat === null) return;
+        const result = await emit("join_room", { code, name, avatarId, replaceSeat: seat });
+        saveAvatarSelection(result.avatarId || avatarId);
+        saveSession(result, name);
+        return;
+      }
+      throw error;
+    }
   } catch (error) { setError(homeError, error); }
+}
+
+function pickBotSeat(bots) {
+  return new Promise((resolve) => {
+    const picker = $("#bot-picker");
+    const options = $("#bot-picker-options");
+    options.innerHTML = bots.map((bot) =>
+      `<button type="button" data-seat="${bot.seat}">
+        <span>${bot.name} · Team ${bot.team ? "B" : "A"}</span>
+        <span>Seat ${bot.seat + 1}</span>
+      </button>`
+    ).join("");
+    picker.classList.remove("hidden");
+    const cleanup = (value) => {
+      picker.classList.add("hidden");
+      options.onclick = null;
+      $("#bot-picker-cancel").onclick = null;
+      resolve(value);
+    };
+    options.onclick = (event) => {
+      const button = event.target.closest("button[data-seat]");
+      if (!button) return;
+      cleanup(Number(button.dataset.seat));
+    };
+    $("#bot-picker-cancel").onclick = () => cleanup(null);
+  });
 }
 
 $("#create-button").addEventListener("click", () => enterRoom("create"));
@@ -280,15 +438,24 @@ $("#start-button").addEventListener("click", () => emit("start_game").catch((err
 $("#fill-bots-button").addEventListener("click", () => emit("fill_bots")
   .then(() => toast("Empty seats filled with bots"))
   .catch((error) => setError(gameError, error)));
-$("#next-button").addEventListener("click", () => emit(state.matchWinner === null ? "next_round" : "restart_match").catch((error) => setError(gameError, error)));
+$("#next-button").addEventListener("click", () => emit("next_round").catch((error) => setError(gameError, error)));
 $("#pass-button").addEventListener("click", () => emit("pass_trump").catch((error) => setError(gameError, error)));
 $("#reveal-button").addEventListener("click", () => emit("reveal_trump").catch((error) => setError(gameError, error)));
 $("#restart-button").addEventListener("click", () => emit("request_restart").catch((error) => setError(gameError, error)));
 $("#accept-restart").addEventListener("click", () => emit("respond_restart", { accept: true }).catch((error) => setError(gameError, error)));
 $("#decline-restart").addEventListener("click", () => emit("respond_restart", { accept: false }).catch((error) => setError(gameError, error)));
+$("#accept-team-switch")?.addEventListener("click", () => emit("respond_team_switch", { accept: true }).catch((error) => setError(gameError, error)));
+$("#decline-team-switch")?.addEventListener("click", () => emit("respond_team_switch", { accept: false }).catch((error) => setError(gameError, error)));
+$("#transfer-host-button")?.addEventListener("click", () => {
+  const seat = Number($("#transfer-host-select")?.value);
+  emit("transfer_host", { seat })
+    .then(() => toast("Host transferred"))
+    .catch((error) => setError(gameError, error));
+});
 $("#exit-button").addEventListener("click", async () => {
-  if (!window.confirm("Exit this room? The game will continue for the other players.")) return;
+  if (!window.confirm("Exit this room? Your seat will free up (or become a bot if a round is in progress).")) return;
   try { await emit("leave_room"); } catch (_) { /* leave locally even if connection dropped */ }
+  socket.close();
   localStorage.removeItem("courtPieceSession");
   storedSession = null;
   previousState = null;
@@ -431,10 +598,26 @@ function renderSeats() {
     const pile = collected
       ? `<div class="captured-pile ${collectedChanged ? "new-capture" : ""}" title="${collected} won trick${collected === 1 ? "" : "s"}"><i></i><i></i><span>${collected}</span></div>`
       : "";
-    element.className = `seat seat-${["bottom", "left", "top", "right"][position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""}`;
+    element.className = `seat seat-${["bottom", "left", "top", "right"][position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""} ${absolute === state.hostSeat ? "host-seat" : ""}`;
+    const canAskSwitch = !isSpectator()
+      && state.canTeamSwitch
+      && player
+      && !player.bot
+      && absolute !== state.you.seat
+      && player.team !== state.players[state.you.seat]?.team
+      && !state.teamSwitchRequest;
+    const switchButton = canAskSwitch
+      ? `<button class="seat-switch-button secondary" type="button" data-switch-seat="${absolute}">Request switch</button>`
+      : "";
     element.innerHTML = player
-      ? `${pile}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">Team ${player.team ? "B" : "A"}</span></div>${cardBacks}`
+      ? `${pile}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${absolute === state.hostSeat ? " <span class=\"bot-tag\">HOST</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">Team ${player.team ? "B" : "A"}</span></div>${switchButton}${cardBacks}`
       : `<div class="avatar empty-avatar">+</div><div class="seat-nameplate"><span class="seat-player-name">Empty seat</span></div>`;
+    element.querySelector("[data-switch-seat]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      emit("request_team_switch", { targetSeat: Number(event.currentTarget.dataset.switchSeat) })
+        .then(() => toast("Switch requested"))
+        .catch((error) => setError(gameError, error));
+    });
   }
 }
 
@@ -773,11 +956,15 @@ function renderPanels() {
   const result = $("#round-panel");
   const auction = $("#auction-panel");
   lobby.classList.toggle("hidden", Boolean(state.round) || isSpectator());
+  // Keep full lobby setup only before first start; between rounds use seat switch controls.
+  if (state.round) lobby.classList.add("hidden");
   trump.classList.add("hidden");
   result.classList.add("hidden");
   auction?.classList.add("hidden");
   renderTeamPicker();
   renderAvatarPicker();
+  renderHostTransfer();
+  renderTeamSwitchPanel();
 
   if (!state.round && !isSpectator()) {
     const count = state.players.filter(Boolean).length;
@@ -787,7 +974,7 @@ function renderPanels() {
     $("#lobby-note").textContent = `${count}/4 seats ready${botCount ? ` · ${botCount} bot${botCount > 1 ? "s" : ""}` : ""}${state.you.seat === state.hostSeat ? " — you are the host" : ""}`;
     const host = state.you.seat === state.hostSeat;
     $("#fill-bots-button").classList.toggle("hidden", !host || count === 4);
-    renderLobbySettings(host);
+    renderLobbySettings(host && !state.settingsLocked);
   } else if (state.round && ["bidding", "auction_decision"].includes(state.round.phase)) {
     auction?.classList.remove("hidden");
     renderBiddingPanel();
@@ -804,13 +991,12 @@ function renderPanels() {
   } else if (state.round?.phase === "round_over") {
     result.classList.remove("hidden");
     const won = !isSpectator() && state.round.winner === state.players[state.you.seat].team;
-    const matchDone = state.matchWinner !== null;
     const contract = state.round.bidState?.contractBid
       ? `<br><span class="contract-result ${state.round.bidState.contractMade ? "made" : "failed"}">Team ${state.round.bidState.contractTeam ? "B" : "A"} contract ${state.round.bidState.contractBid} · ${state.round.bidState.contractMade ? "MADE" : "FAILED"}</span>`
       : "";
-    $("#round-result").innerHTML = `<strong>${matchDone ? `Team ${state.matchWinner ? "B" : "A"} wins the match!` : isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Hands ${state.round.tricks[0]}–${state.round.tricks[1]} · Match ${state.score[0]}–${state.score[1]}${contract}`;
+    $("#round-result").innerHTML = `<strong>${isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Hands ${state.round.tricks[0]}–${state.round.tricks[1]} · Score ${state.score[0]}–${state.score[1]}${contract}`;
     $("#next-button").classList.toggle("hidden", isSpectator() || state.you.seat !== state.hostSeat);
-    $("#next-button").textContent = matchDone ? "Start new match" : "Deal next round";
+    $("#next-button").textContent = "Deal next round";
   }
   $("#reveal-button").classList.toggle("hidden", !state.round?.canRevealTrump);
 
@@ -821,13 +1007,39 @@ function renderPanels() {
   if (vote) {
     const requester = state.players[vote.requesterSeat]?.name || "A player";
     const approved = vote.approvals.includes(state.you.seat);
-    $("#restart-title").textContent = `${requester} wants a fresh match`;
+    $("#restart-title").textContent = `${requester} wants a fresh deal`;
     $("#restart-note").textContent = approved
       ? `You accepted · ${vote.approvals.length}/4 players accepted`
-      : `Current score and deal will reset. ${vote.approvals.length}/4 accepted.`;
+      : `Starts a new deal. Room score stays ${state.score[0]}–${state.score[1]}. ${vote.approvals.length}/4 accepted.`;
     $("#accept-restart").classList.toggle("hidden", approved);
     $("#decline-restart").textContent = vote.requesterSeat === state.you.seat ? "Cancel request" : "Decline";
   }
+}
+
+function renderHostTransfer() {
+  const block = $("#host-transfer-block");
+  const select = $("#transfer-host-select");
+  if (!block || !select) return;
+  const host = !isSpectator() && state.you.seat === state.hostSeat;
+  const humans = state.players
+    .map((player, seat) => ({ player, seat }))
+    .filter(({ player, seat }) => player && !player.bot && seat !== state.you.seat);
+  block.classList.toggle("hidden", !host || !humans.length || Boolean(state.round));
+  select.innerHTML = humans.map(({ player, seat }) =>
+    `<option value="${seat}">${player.name} · Team ${player.team ? "B" : "A"}</option>`
+  ).join("");
+}
+
+function renderTeamSwitchPanel() {
+  const panel = $("#team-switch-panel");
+  if (!panel) return;
+  const request = state.teamSwitchRequest;
+  const forMe = !isSpectator() && request && request.toSeat === state.you.seat;
+  panel.classList.toggle("hidden", !forMe);
+  if (!forMe) return;
+  const from = state.players[request.fromSeat];
+  $("#team-switch-title").textContent = `${from?.name || "A player"} wants to switch teams`;
+  $("#team-switch-note").textContent = `They are on Team ${from?.team ? "B" : "A"}. Accept to swap seats.`;
 }
 
 function renderTimer() {
@@ -934,7 +1146,7 @@ function runGameEffects() {
     const team = state.round.winner;
     const streak = nextEffectStreak("round", team);
     const payload = { team, isLocal: isLocalTeam(team), streak, court: Boolean(state.round.court), element: $(".table") };
-    const matchJustFinished = state.matchWinner !== null && state.matchWinner !== previousState.matchWinner;
+    const matchJustFinished = false;
     if (matchJustFinished) effects?.onMatchWin?.(payload);
     else effects?.onRoundWin?.(payload);
     if (winnerSeat >= 0) nextEffectStreak("trick", state.players[winnerSeat]?.team);
@@ -1001,6 +1213,18 @@ socket.on("room_state", (nextState) => {
   render();
   requestAnimationFrame(() => window.scrollTo(0, 0));
 });
+socket.on("room_destroyed", () => {
+  toast("Room closed — no human players left");
+  socket.close();
+  localStorage.removeItem("courtPieceSession");
+  storedSession = null;
+  state = null;
+  previousState = null;
+  game.classList.add("hidden");
+  home.classList.remove("hidden");
+  applyTableTheme(createTableTheme);
+  history.replaceState(null, "", location.pathname);
+});
 window.addEventListener("resize", () => { if (state) renderHand(); });
 setInterval(renderTimer, 250);
 applyTableTheme(createTableTheme);
@@ -1008,15 +1232,23 @@ bindOptionalControls();
 initializeEffects();
 document.addEventListener("pointerdown", unlockEffectsAudio, true);
 document.addEventListener("keydown", unlockEffectsAudio, true);
-socket.on("connect", async () => {
+
+async function resumeSession() {
   const queryCode = new URLSearchParams(location.search).get("room")?.toUpperCase();
   if (storedSession?.token && (!queryCode || queryCode === storedSession.code)) {
     try {
+      await socket.connect(storedSession.code);
       const result = await emit(storedSession.role === "spectator" ? "join_spectator" : "join_room", storedSession);
       saveSession(result, storedSession.name);
       return;
-    } catch (_) { localStorage.removeItem("courtPieceSession"); storedSession = null; }
+    } catch (_) {
+      localStorage.removeItem("courtPieceSession");
+      storedSession = null;
+      socket.close();
+    }
   }
   if (queryCode) $("#room-code").value = queryCode;
   if (storedSession?.name) $("#name").value = storedSession.name;
-});
+}
+
+resumeSession();

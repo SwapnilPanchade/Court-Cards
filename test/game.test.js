@@ -1,7 +1,7 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } = require("../game");
-const { TABLE_THEMES, AVATAR_IDS, roomView, updateRoomSettings, chooseRoomTeam, chooseRoomAvatar, recordRoundResult, assertMatchOpen } = require("../server");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } from "../src/game.js";
+import { TABLE_THEMES, AVATAR_IDS, roomView, updateRoomSettings, chooseRoomTeam, chooseRoomAvatar, recordRoundResult, assertMatchOpen } from "../src/room-logic.js";
 
 const card = (rank, suit, value) => ({ id: `${rank}-${suit}`, rank, suit, value });
 
@@ -406,7 +406,7 @@ test("room avatars are validated, exposed, and locked after play starts", () => 
   assert.throws(() => chooseRoomAvatar(room, 0, "jugaadu"), /cannot change after the game starts/);
 });
 
-test("round result gives exactly one point to the winning team and resolves the match target", () => {
+test("round result gives exactly one point to the winning team and never auto-closes the match", () => {
   const room = testRoom();
   assert.doesNotThrow(() => assertMatchOpen(room));
   const firstWin = { winner: 1, resultRecorded: false };
@@ -419,7 +419,7 @@ test("round result gives exactly one point to the winning team and resolves the 
 
   recordRoundResult(room, { winner: 1, resultRecorded: false });
   assert.deepEqual(room.score, [0, 2]);
-  assert.equal(room.matchWinner, 1);
-  assert.throws(() => assertMatchOpen(room), /Match is complete/);
+  assert.equal(room.matchWinner, null);
+  assert.doesNotThrow(() => assertMatchOpen(room));
   assert.throws(() => recordRoundResult(room, { winner: null }), /winner is not resolved/i);
 });

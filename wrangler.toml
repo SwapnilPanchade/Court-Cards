@@ -1,0 +1,16 @@
+name = "court-piece"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "RoomDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDurableObject"]
