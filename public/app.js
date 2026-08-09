@@ -139,6 +139,8 @@ let lastEnabledEffectsIntensity = ["off", "0"].includes(String(effectsIntensity)
 let audioUnlockPending = false;
 let pendingBidValue = null;
 let pendingBidKey = "";
+let roomAvailabilityTimer = null;
+let roomAvailabilityRequest = 0;
 const effectStreaks = {
   trick: { team: null, count: 0 },
   round: { team: null, count: 0 }
@@ -364,6 +366,44 @@ function setError(element, error) {
   if (error) setTimeout(() => { element.textContent = ""; }, 3000);
 }
 
+async function previewRoomAvailability() {
+  const code = $("#room-code").value.trim().toUpperCase();
+  const result = $("#room-availability");
+  const joinButton = $("#join-button");
+  const requestId = ++roomAvailabilityRequest;
+  result.classList.add("hidden");
+  result.replaceChildren();
+  joinButton.textContent = "Join table";
+  if (code.length !== 5) return;
+
+  try {
+    const response = await fetch(`/api/room/${encodeURIComponent(code)}`);
+    const info = await response.json().catch(() => null);
+    if (requestId !== roomAvailabilityRequest) return;
+    if (!info?.ok) {
+      result.textContent = "Room not found";
+      result.className = "room-availability is-error";
+      return;
+    }
+    const humans = (info.players || []).filter((player) => player && !player.bot).length;
+    const bots = info.bots || [];
+    const empty = info.emptySeats || [];
+    result.className = "room-availability";
+    if (bots.length) {
+      result.innerHTML = `<strong>${bots.length} bot${bots.length === 1 ? "" : "s"} available</strong><span>${empty.length ? `${empty.length} open seat${empty.length === 1 ? "" : "s"} first` : "Tap Join, then choose the seat you replace"}</span>`;
+      if (!empty.length) joinButton.textContent = "Join & replace bot";
+    } else if (empty.length) {
+      result.innerHTML = `<strong>${empty.length} seat${empty.length === 1 ? "" : "s"} open</strong><span>${humans}/4 people at this table</span>`;
+    } else {
+      result.innerHTML = "<strong>Human table is full</strong><span>You can still watch as spectator</span>";
+    }
+  } catch (_) {
+    if (requestId !== roomAvailabilityRequest) return;
+    result.textContent = "Could not check this room yet";
+    result.className = "room-availability is-error";
+  }
+}
+
 function saveSession(result, name) {
   const role = result.role || "player";
   storedSession = {
@@ -439,8 +479,9 @@ function pickBotSeat(bots) {
     const options = $("#bot-picker-options");
     options.innerHTML = bots.map((bot) =>
       `<button type="button" data-seat="${bot.seat}">
-        <span>${bot.name} · Team ${bot.team ? "B" : "A"}</span>
-        <span>Seat ${bot.seat + 1}</span>
+        <span class="bot-picker-avatar" style="--avatar-image:url('assets/avatars/${normalizeAvatarId(bot.avatarId)}.webp')"></span>
+        <span class="bot-picker-copy"><strong>${bot.name}</strong><small>Team ${bot.team ? "B" : "A"} · Seat ${bot.seat + 1}</small></span>
+        <b>Take seat</b>
       </button>`
     ).join("");
     picker.classList.remove("hidden");
@@ -457,6 +498,102 @@ function pickBotSeat(bots) {
     };
     $("#bot-picker-cancel").onclick = () => cleanup(null);
   });
+}
+
+function confirmHostKick(player) {
+  return new Promise((resolve) => {
+    const dialog = $("#host-action-dialog");
+    $("#host-action-title").textContent = `Remove ${player.name}?`;
+    $("#host-action-note").textContent = state.round && state.round.phase !== "round_over"
+      ? "Their connection will close and a bot will finish the active seat."
+      : "Their seat will become open for another friend to join.";
+    dialog.classList.remove("hidden");
+    const cleanup = (value) => {
+      dialog.classList.add("hidden");
+      $("#host-action-cancel").onclick = null;
+      $("#host-action-confirm").onclick = null;
+      resolve(value);
+    };
+    $("#host-action-cancel").onclick = () => cleanup(false);
+    $("#host-action-confirm").onclick = () => cleanup(true);
+  });
+}
+
+function setOverlayOpen(element, trigger, open) {
+  if (!element || !trigger) return;
+  trigger.setAttribute("aria-expanded", String(open));
+  if (open) {
+    element.classList.remove("hidden");
+    if (window.gsap && !reducedMotionEnabled()) {
+      gsap.fromTo(element, { autoAlpha: 0, y: -12, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.28, ease: "power3.out", clearProps: "transform,opacity,visibility" });
+    }
+  } else if (window.gsap && !reducedMotionEnabled()) {
+    gsap.to(element, { autoAlpha: 0, y: -10, duration: 0.18, ease: "power2.in", onComplete: () => {
+      element.classList.add("hidden");
+      gsap.set(element, { clearProps: "transform,opacity,visibility" });
+    } });
+  } else element.classList.add("hidden");
+}
+
+function closeHudDrawer() {
+  setOverlayOpen($("#hud-drawer"), $("#hud-toggle"), false);
+}
+
+function closeFxLab() {
+  setOverlayOpen($("#fx-lab"), $("#fx-lab-toggle"), false);
+}
+
+function createFxDemoCard(card, className) {
+  const holder = document.createElement("div");
+  holder.innerHTML = cardHtml(card, { disabled: true });
+  const element = holder.firstElementChild;
+  element.classList.add("fx-demo-source", className);
+  $(".table")?.appendChild(element);
+  return element;
+}
+
+function runAtelierCardPlayDemo() {
+  const table = $(".table");
+  if (!table || !window.gsap) return;
+  const demo = createFxDemoCard({ id: "demo-play", rank: "Q", suit: "diamonds" }, "fx-demo-play-card");
+  const tableRect = table.getBoundingClientRect();
+  const start = $("#seat-0 .avatar")?.getBoundingClientRect();
+  const targetX = tableRect.width * 0.5 - demo.offsetWidth * 0.5;
+  const targetY = tableRect.height * 0.54 - demo.offsetHeight * 0.5;
+  gsap.set(demo, {
+    left: start ? start.left - tableRect.left : tableRect.width * 0.5,
+    top: start ? start.top - tableRect.top : tableRect.height,
+    rotationY: 68,
+    rotation: 14,
+    scale: 0.55,
+    autoAlpha: 0
+  });
+  gsap.to(demo, { left: targetX, top: targetY, rotationY: 0, rotation: -4, scale: 1, autoAlpha: 1, duration: 0.62, ease: "power3.out" });
+  gsap.to(demo, { autoAlpha: 0, scale: 0.9, duration: 0.2, delay: 1.05, onComplete: () => demo.remove() });
+}
+
+async function runFxDemo(kind) {
+  const effects = initializeEffects();
+  if (!effects) return;
+  await effects.unlockAudio?.();
+  effects.setIntensity("high");
+  const table = $(".table");
+  const localTeam = isSpectator() ? 0 : state?.players[state?.you?.seat]?.team || 0;
+  const payload = { team: localTeam, isLocal: true, element: table, streak: kind === "lightning" ? 3 : 1 };
+
+  if (kind === "card") {
+    if (isAtelierTheme()) runAtelierCardPlayDemo();
+    else effects.onCardPlay(payload);
+  } else if (kind === "lightning") {
+    effects.onTrumpCut({ ...payload, forceLightning: true });
+  } else if (kind === "ace-cut") {
+    const ace = createFxDemoCard({ id: "demo-ace", rank: "A", suit: "spades" }, "fx-demo-ace-card");
+    const hukum = createFxDemoCard({ id: "demo-hukum", rank: "9", suit: "hearts" }, "fx-demo-hukum-card");
+    effects.onTrumpCut({ ...payload, aceCut: true, forceLightning: true, aceElement: ace, element: hukum });
+    window.setTimeout(() => { ace.remove(); hukum.remove(); }, 2200);
+  } else if (kind === "trick") effects.onTrickWin(payload);
+  else if (kind === "round") effects.onRoundWin(payload);
+  else if (kind === "match") effects.onMatchWin(payload);
 }
 
 function bindGameSelector() {
@@ -476,6 +613,11 @@ $("#create-button").addEventListener("click", () => enterRoom("create"));
 $("#join-button").addEventListener("click", () => enterRoom("join"));
 $("#spectate-button").addEventListener("click", () => enterRoom("spectator"));
 $("#room-code").addEventListener("keydown", (event) => { if (event.key === "Enter") enterRoom("join"); });
+$("#room-code").addEventListener("input", (event) => {
+  event.target.value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+  window.clearTimeout(roomAvailabilityTimer);
+  roomAvailabilityTimer = window.setTimeout(previewRoomAvailability, 180);
+});
 bindGameSelector();
 
 $("#start-button").addEventListener("click", () => emit("start_game").catch((error) => setError(gameError, error)));
@@ -496,9 +638,8 @@ $("#transfer-host-button")?.addEventListener("click", () => {
     .then(() => toast("Host transferred"))
     .catch((error) => setError(gameError, error));
 });
-$("#exit-button").addEventListener("click", async () => {
-  if (!window.confirm("Exit this room? Your seat will free up (or become a bot if a round is in progress).")) return;
-  try { await emit("leave_room"); } catch (_) { /* leave locally even if connection dropped */ }
+
+function returnToHome(message = "") {
   socket.close();
   localStorage.removeItem("courtPieceSession");
   storedSession = null;
@@ -511,12 +652,39 @@ $("#exit-button").addEventListener("click", async () => {
   game.classList.add("hidden");
   home.classList.remove("hidden");
   $("#room-code").value = "";
+  $("#room-availability")?.classList.add("hidden");
   applyTableTheme(createTableTheme);
   history.replaceState(null, "", location.pathname);
+  if (message) toast(message);
+}
+
+$("#exit-button").addEventListener("click", async () => {
+  if (!window.confirm("Exit this room? Your seat will free up (or become a bot if a round is in progress).")) return;
+  try { await emit("leave_room"); } catch (_) { /* leave locally even if connection dropped */ }
+  returnToHome();
 });
 $("#copy-code").addEventListener("click", shareInvite);
 $("#share-button").addEventListener("click", shareInvite);
 $("#watch-player").addEventListener("change", (event) => emit("watch_player", { seat: event.target.value }).catch((error) => setError(gameError, error)));
+$("#hud-toggle")?.addEventListener("click", () => {
+  const trigger = $("#hud-toggle");
+  const open = trigger.getAttribute("aria-expanded") !== "true";
+  closeFxLab();
+  setOverlayOpen($("#hud-drawer"), trigger, open);
+});
+$("#hud-close")?.addEventListener("click", closeHudDrawer);
+$("#fx-lab-toggle")?.addEventListener("click", () => {
+  const trigger = $("#fx-lab-toggle");
+  const open = trigger.getAttribute("aria-expanded") !== "true";
+  closeHudDrawer();
+  setOverlayOpen($("#fx-lab"), trigger, open);
+});
+$("#fx-lab-close")?.addEventListener("click", closeFxLab);
+$("#fx-lab")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-fx-demo]");
+  if (!button) return;
+  runFxDemo(button.dataset.fxDemo).catch((error) => setError(gameError, error));
+});
 
 async function shareInvite() {
   const url = `${location.origin}${location.pathname}?room=${state.code}`;
@@ -654,13 +822,30 @@ function renderSeats() {
     const switchButton = canAskSwitch
       ? `<button class="seat-switch-button secondary" type="button" data-switch-seat="${absolute}">Request switch</button>`
       : "";
+    const canKick = !isSpectator()
+      && state.you.seat === state.hostSeat
+      && player
+      && absolute !== state.you.seat
+      && (!state.round || state.round.phase === "round_over" || !player.bot);
+    const kickButton = canKick
+      ? `<button class="seat-kick-button" type="button" data-kick-seat="${absolute}" aria-label="Remove ${player.name} from table">Remove</button>`
+      : "";
     element.innerHTML = player
-      ? `${pile}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${absolute === state.hostSeat ? " <span class=\"bot-tag\">HOST</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">${state.gameType === "court-piece" ? `Team ${player.team ? "B" : "A"}` : `Seat ${absolute + 1}`}</span></div>${switchButton}${cardBacks}`
+      ? `${pile}${kickButton}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${absolute === state.hostSeat ? " <span class=\"bot-tag\">HOST</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">${state.gameType === "court-piece" ? `Team ${player.team ? "B" : "A"}` : `Seat ${absolute + 1}`}</span></div>${switchButton}${cardBacks}`
       : `<div class="avatar empty-avatar">+</div><div class="seat-nameplate"><span class="seat-player-name">Empty seat</span></div>`;
     element.querySelector("[data-switch-seat]")?.addEventListener("click", (event) => {
       event.stopPropagation();
       emit("request_team_switch", { targetSeat: Number(event.currentTarget.dataset.switchSeat) })
         .then(() => toast("Switch requested"))
+        .catch((error) => setError(gameError, error));
+    });
+    element.querySelector("[data-kick-seat]")?.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const targetSeat = Number(event.currentTarget.dataset.kickSeat);
+      const target = state.players[targetSeat];
+      if (!target || !(await confirmHostKick(target))) return;
+      emit("kick_player", { seat: targetSeat })
+        .then((result) => toast(result.replacedWithBot ? `${target.name} removed · bot took the active seat` : `${target.name} removed`))
         .catch((error) => setError(gameError, error));
     });
   }
@@ -802,6 +987,14 @@ function renderTeamPicker() {
     button.setAttribute("aria-pressed", String(selected));
     button.disabled = isSpectator() || Boolean(state.round);
     button.onclick = () => emit("choose_team", { team }).catch((error) => setError(gameError, error));
+  });
+  [0, 1].forEach((team) => {
+    const roster = $(`#team-${team ? "b" : "a"}-roster`);
+    if (!roster) return;
+    const names = state.players
+      .filter((player) => player?.team === team)
+      .map((player) => player.bot ? `${player.name} · bot` : player.name);
+    roster.textContent = names.length ? names.join(" · ") : "2 seats open";
   });
 }
 
@@ -1260,6 +1453,69 @@ function renderStatus() {
   $("#status").textContent = text;
 }
 
+function hukumSummary() {
+  const round = state?.round;
+  if (!round || state.gameType !== "court-piece") {
+    return { eyebrow: "HUKUM", title: "No call yet", detail: "Start the deal to choose", history: [] };
+  }
+  const bid = round.bidState;
+  const caller = state.players[round.caller]?.name || "Caller";
+  const suit = round.trump ? symbols[round.trump] : round.mode === "hidden" ? "Hidden" : "Choosing";
+  const contractBid = bid?.contractBid ?? bid?.highestBid;
+  const contractSeat = bid?.contractBid !== null && bid?.contractBid !== undefined
+    ? (bid.decision === "keep" ? round.caller : bid.highestBidder)
+    : bid?.highestBidder;
+  const contractPlayer = contractSeat === null || contractSeat === undefined ? caller : state.players[contractSeat]?.name || caller;
+  const team = contractSeat === null || contractSeat === undefined
+    ? state.players[round.caller]?.team
+    : state.players[contractSeat]?.team;
+  const history = bid?.history?.map((entry) => {
+    const player = state.players[entry.seat];
+    const action = entry.action === "pass"
+      ? "Passed"
+      : entry.action === "give"
+        ? "Gave contract"
+        : entry.action === "keep"
+          ? `Kept ${entry.bid}`
+          : entry.action === "forced_bid"
+            ? `Opened ${entry.bid}`
+            : `Bid ${entry.bid}`;
+    return { player: player?.name || `Seat ${entry.seat + 1}`, team: player?.team || 0, action };
+  }) || (round.passedBy || []).map((seat) => ({ player: state.players[seat]?.name || `Seat ${seat + 1}`, team: state.players[seat]?.team || 0, action: "Passed Hukum" }));
+
+  if (round.phase === "bidding") {
+    const leader = bid?.highestBidder === null ? "No bid yet" : `${state.players[bid.highestBidder]?.name || "Player"} · ${bid.highestBid}`;
+    return { eyebrow: "AUCTION LIVE", title: leader, detail: `Team ${bid?.highestBidder === null ? "—" : state.players[bid.highestBidder]?.team ? "B" : "A"} leads`, history };
+  }
+  if (round.phase === "auction_decision") {
+    return { eyebrow: "CONTRACT DECISION", title: `${contractPlayer} · ${contractBid}`, detail: `${caller} decides who keeps Hukum`, history };
+  }
+  if (contractBid !== null && contractBid !== undefined) {
+    return { eyebrow: `TEAM ${team ? "B" : "A"} CONTRACT`, title: `${contractPlayer} called ${contractBid}`, detail: `Hukum ${suit} · ${caller} opened`, history };
+  }
+  return { eyebrow: "HUKUM CALL", title: `${caller} · ${suit}`, detail: (round.passedBy || []).length ? `${round.passedBy.length} passed before the call` : "Normal Hukum · no contract bid", history };
+}
+
+function renderPremiumHud() {
+  const summary = hukumSummary();
+  const round = state.round;
+  $("#hud-score-a").textContent = state.score[0];
+  $("#hud-score-b").textContent = state.score[1];
+  $("#hud-hands-a").textContent = `${round?.tricks?.[0] || 0} hands`;
+  $("#hud-hands-b").textContent = `${round?.tricks?.[1] || 0} hands`;
+  $("#hud-status").textContent = $("#status").textContent;
+  $("#hud-contract").innerHTML = `<span>${summary.eyebrow}</span><strong>${summary.title}</strong><small>${summary.detail}</small>`;
+  const history = $("#hud-bid-history");
+  history.innerHTML = summary.history.length
+    ? summary.history.map((entry) => `<li><span>${entry.player}<small>Team ${entry.team ? "B" : "A"}</small></span><strong>${entry.action}</strong></li>`).join("")
+    : "<li class=\"is-empty\">No Hukum passes or bids yet</li>";
+
+  const story = $("#hukum-story");
+  const visible = Boolean(round && state.gameType === "court-piece");
+  story.classList.toggle("hidden", !visible);
+  if (visible) story.innerHTML = `<span>${summary.eyebrow}</span><strong>${summary.title}</strong><small>${summary.detail}</small>`;
+}
+
 function viewerTeam() {
   return state.players[perspectiveSeat()]?.team;
 }
@@ -1414,6 +1670,7 @@ function render() {
   renderHand();
   renderPanels();
   renderStatus();
+  renderPremiumHud();
   renderTimer();
   runGameEffects();
 }
@@ -1424,6 +1681,9 @@ socket.on("room_state", (nextState) => {
   applyTableTheme(state.tableTheme);
   render();
   requestAnimationFrame(() => window.scrollTo(0, 0));
+});
+socket.on("kicked", (payload = {}) => {
+  returnToHome(payload.reason || "The host removed you from the table.");
 });
 socket.on("room_destroyed", (payload = {}) => {
   toast(payload.reason === "human_inactivity" ? "Room closed after 5 minutes of inactivity" : "Room closed — no human players left");
@@ -1459,7 +1719,10 @@ async function resumeSession() {
       socket.close();
     }
   }
-  if (queryCode) $("#room-code").value = queryCode;
+  if (queryCode) {
+    $("#room-code").value = queryCode;
+    previewRoomAvailability();
+  }
   if (storedSession?.name) $("#name").value = storedSession.name;
 }
 

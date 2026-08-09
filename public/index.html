@@ -118,6 +118,7 @@
             <input id="room-code" maxlength="5" autocomplete="off" placeholder="ROOM CODE" aria-label="Room code" />
             <button id="join-button" class="secondary">Join table</button>
           </div>
+          <div id="room-availability" class="room-availability hidden" aria-live="polite"></div>
           <button id="spectate-button" class="spectate-button secondary">Watch as spectator</button>
 
           <div class="or"><span>or create your table</span></div>
@@ -183,12 +184,13 @@
 
           <div class="header-center">
             <div id="game-name" class="game-name">COURT PIECE</div>
-            <div class="scoreboard">
+            <button id="hud-toggle" class="scoreboard" type="button" aria-expanded="false" aria-controls="hud-drawer" title="Open match details">
               <span><b id="score-a-label">Team A</b> <b id="score-a">0</b></span>
               <i></i>
               <span><b id="score-b-label">Team B</b> <b id="score-b">0</b></span>
               <small><svg class="icon trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"/></svg>Match</small>
-            </div>
+              <span class="hud-toggle-label">Details</span>
+            </button>
           </div>
 
           <div class="experience-controls" aria-label="Game experience controls">
@@ -200,6 +202,9 @@
               <input id="effects-toggle" type="checkbox" checked />
               <span class="control-icon" aria-hidden="true">✦</span><span class="control-label">FX</span>
             </label>
+            <button id="fx-lab-toggle" class="control-toggle fx-lab-toggle" type="button" aria-expanded="false" aria-controls="fx-lab">
+              <span class="control-icon" aria-hidden="true">FX</span><span class="control-label">Demo</span>
+            </button>
           </div>
         </header>
 
@@ -212,6 +217,19 @@
           </div>
           <div id="trump-badge" class="trump-badge hidden"></div>
         </div>
+
+        <section id="hud-drawer" class="hud-drawer hidden" aria-label="Match details">
+          <div class="hud-drawer-head">
+            <div><span class="mini-label">LIVE MATCH</span><strong id="hud-status">Waiting for players</strong></div>
+            <button id="hud-close" class="text-button" type="button">Close</button>
+          </div>
+          <div class="hud-drawer-grid">
+            <div class="hud-stat"><span>Team A</span><strong id="hud-score-a">0</strong><small id="hud-hands-a">0 hands</small></div>
+            <div id="hud-contract" class="hud-contract"><span>HUKUM</span><strong>No call yet</strong><small>Normal game</small></div>
+            <div class="hud-stat"><span>Team B</span><strong id="hud-score-b">0</strong><small id="hud-hands-b">0 hands</small></div>
+          </div>
+          <ol id="hud-bid-history" class="hud-bid-history" aria-label="Hukum call history"></ol>
+        </section>
 
         <div id="spectator-bar" class="spectator-bar hidden">
           <span>Watching</span>
@@ -229,6 +247,7 @@
           </div>
           <div class="table">
             <div id="motion-layer" class="motion-layer" aria-live="polite" aria-atomic="true"></div>
+            <div id="hukum-story" class="hukum-story hidden" aria-live="polite"></div>
             <div id="center-deck" class="center-deck hidden" aria-hidden="true">
               <i></i><i></i><i></i>
             </div>
@@ -322,8 +341,8 @@
                 <small>Partners sit opposite</small>
               </div>
               <div class="team-buttons">
-                <button id="team-a-button" class="team-button team-button-a" type="button" data-team="0" aria-pressed="false"><span>A</span> Team A</button>
-                <button id="team-b-button" class="team-button team-button-b" type="button" data-team="1" aria-pressed="false"><span>B</span> Team B</button>
+                <button id="team-a-button" class="team-button team-button-a" type="button" data-team="0" aria-pressed="false"><span>A</span><b>Team A</b><small id="team-a-roster">Open · Open</small></button>
+                <button id="team-b-button" class="team-button team-button-b" type="button" data-team="1" aria-pressed="false"><span>B</span><b>Team B</b><small id="team-b-roster">Open · Open</small></button>
               </div>
             </div>
 
@@ -364,6 +383,33 @@
             <button id="bot-picker-cancel" class="secondary" type="button">Cancel</button>
           </div>
         </div>
+
+        <div id="host-action-dialog" class="bot-picker hidden" role="dialog" aria-modal="true" aria-labelledby="host-action-title">
+          <div class="bot-picker-card host-action-card">
+            <p class="eyebrow">HOST CONTROL</p>
+            <h2 id="host-action-title">Remove player?</h2>
+            <p id="host-action-note" class="panel-intro"></p>
+            <div class="host-action-buttons">
+              <button id="host-action-cancel" class="secondary" type="button">Keep player</button>
+              <button id="host-action-confirm" class="danger-button" type="button">Remove from table</button>
+            </div>
+          </div>
+        </div>
+
+        <section id="fx-lab" class="fx-lab hidden" aria-label="Animation demo lab">
+          <div class="fx-lab-head">
+            <div><span class="mini-label">LIVE FX LAB</span><strong>Tap an effect to preview it</strong></div>
+            <button id="fx-lab-close" class="text-button" type="button">Close</button>
+          </div>
+          <div class="fx-demo-grid">
+            <button type="button" data-fx-demo="card"><span>01</span><strong>Card play</strong><small>Seat to table</small></button>
+            <button type="button" data-fx-demo="lightning"><span>02</span><strong>Lightning cut</strong><small>Hukum strike</small></button>
+            <button type="button" data-fx-demo="ace-cut"><span>03</span><strong>Ekka down</strong><small>Ace tear + rise</small></button>
+            <button type="button" data-fx-demo="trick"><span>04</span><strong>Trick won</strong><small>Hands update</small></button>
+            <button type="button" data-fx-demo="round"><span>05</span><strong>Round won</strong><small>Full celebration</small></button>
+            <button type="button" data-fx-demo="match"><span>06</span><strong>Game won</strong><small>Maximum payoff</small></button>
+          </div>
+        </section>
 
         <section id="trump-panel" class="panel trump-panel hidden">
           <p class="eyebrow">You saw five cards</p>

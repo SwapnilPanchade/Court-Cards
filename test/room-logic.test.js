@@ -15,6 +15,7 @@ import {
   humanIdleDeadline,
   isHumanIdle,
   joinAsPlayer,
+  kickPlayer,
   leavePlayerSeat,
   markHumanActivity,
   makeBot,
@@ -142,6 +143,26 @@ test("host transfer moves ownership to another human", () => {
   assert.equal(transferHost(room, 0, 2), 2);
   assert.equal(room.hostSeat, 2);
   assert.throws(() => transferHost(room, 0, 2), /Only the host/);
+});
+
+test("host can remove lobby seats and active humans become bots", () => {
+  const room = createEmptyRoom("ABC12", human("Host", "host"));
+  room.players[1] = human("Guest", "guest");
+  room.players[2] = makeBot(2, () => "bot-2");
+  const lobbyKick = kickPlayer(room, 0, 2);
+  assert.equal(room.players[2], null);
+  assert.equal(lobbyKick.replacedWithBot, false);
+  assert.throws(() => kickPlayer(room, 1, 0), /Only the host/);
+  assert.throws(() => kickPlayer(room, 0, 0), /Exit/);
+
+  room.players[2] = human("P2", "p2");
+  room.players[3] = human("P3", "p3");
+  room.round = createRound(3, room.settings, () => 0.5);
+  const activeKick = kickPlayer(room, 0, 1, { randomUUID: () => "replacement-bot" });
+  assert.equal(activeKick.replacedWithBot, true);
+  assert.equal(activeKick.removedToken, "guest");
+  assert.equal(room.players[1].bot, true);
+  assert.throws(() => kickPlayer(room, 0, 1), /between rounds/);
 });
 
 test("scores accumulate without closing the match", () => {

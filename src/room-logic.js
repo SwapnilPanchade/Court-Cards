@@ -324,6 +324,36 @@ export function transferHost(room, fromSeat, targetSeat) {
   return targetSeat;
 }
 
+export function kickPlayer(room, hostSeat, targetSeat, { randomUUID = () => crypto.randomUUID() } = {}) {
+  if (hostSeat !== room.hostSeat) throw new Error("Only the host can remove players.");
+  const seat = Number(targetSeat);
+  if (!Number.isInteger(seat) || seat < 0 || seat > 3) throw new Error("Choose a valid player.");
+  if (seat === hostSeat) throw new Error("Use Exit to leave your own table.");
+  const target = room.players[seat];
+  if (!target) throw new Error("That seat is already empty.");
+
+  const activeRound = Boolean(room.round) && room.round.phase !== "round_over";
+  if (activeRound && target.bot) throw new Error("Bots can only be removed between rounds.");
+
+  if (room.teamSwitchRequest
+    && (room.teamSwitchRequest.fromSeat === seat || room.teamSwitchRequest.toSeat === seat)) {
+    room.teamSwitchRequest = null;
+  }
+  if (room.restartVote?.approvals) {
+    room.restartVote.approvals = room.restartVote.approvals.filter((item) => item !== seat);
+    if (room.restartVote.requesterSeat === seat) room.restartVote = null;
+  }
+
+  const removedToken = target.bot ? null : target.token;
+  if (activeRound) {
+    room.players[seat] = makeBot(seat, randomUUID);
+    return { seat, removedToken, replacedWithBot: true };
+  }
+
+  room.players[seat] = null;
+  return { seat, removedToken, replacedWithBot: false };
+}
+
 export function assignNextHost(room, leavingSeat) {
   if (room.hostSeat !== leavingSeat) return room.hostSeat;
   const humans = humanSeats(room).filter((seat) => seat !== leavingSeat);

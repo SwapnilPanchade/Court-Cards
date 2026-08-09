@@ -16,6 +16,7 @@ import {
   collectTrick,
   defaultAvatarForSeat,
   joinAsPlayer,
+  kickPlayer,
   leavePlayerSeat,
   makeBot,
   humanIdleDeadline,
@@ -256,6 +257,8 @@ export class RoomDurableObject {
         return this.respondSwitch(ws, payload);
       case "transfer_host":
         return this.doTransferHost(ws, payload);
+      case "kick_player":
+        return this.doKickPlayer(ws, payload);
       case "place_bid":
         return this.doPlaceBid(ws, payload);
       case "place_call":
@@ -487,6 +490,28 @@ export class RoomDurableObject {
     await this.saveRoom();
     this.broadcast();
     return { hostSeat };
+  }
+
+  async doKickPlayer(ws, payload) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room) throw new Error("Join a room first.");
+    const result = kickPlayer(room, session.seat, Number(payload.seat));
+
+    if (result.removedToken) {
+      for (const socket of this.ctx.getWebSockets()) {
+        const attachment = socket.deserializeAttachment() || {};
+        if (attachment.role !== "player" || attachment.token !== result.removedToken) continue;
+        try { socket.send(JSON.stringify({ event: "kicked", payload: { reason: "The host removed you from the table." } })); } catch (_) { /* socket may already be closed */ }
+        socket.serializeAttachment({ role: null });
+        try { socket.close(1000, "Removed by host"); } catch (_) { /* socket may already be closed */ }
+      }
+    }
+
+    await this.saveRoom();
+    this.broadcast();
+    if (room.round) await this.scheduleAfterStateChange();
+    return { seat: result.seat, replacedWithBot: result.replacedWithBot };
   }
 
   async doPlaceBid(ws, payload) {

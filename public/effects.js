@@ -324,6 +324,86 @@
     return { x: 0.5, y: 0.48 };
   }
 
+  function lightningPath(start, end, depth = 6, spread = 72) {
+    let points = [start, end];
+    for (let level = 0; level < depth; level += 1) {
+      const next = [points[0]];
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const a = points[index];
+        const b = points[index + 1];
+        const midpoint = {
+          x: (a.x + b.x) / 2 + (Math.random() - 0.5) * spread,
+          y: (a.y + b.y) / 2 + (Math.random() - 0.5) * spread * 0.34
+        };
+        next.push(midpoint, b);
+      }
+      points = next;
+      spread *= 0.52;
+    }
+    return points;
+  }
+
+  function strokeLightning(context, points, color, width, blur) {
+    context.save();
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = color;
+    context.lineWidth = width;
+    context.shadowColor = color;
+    context.shadowBlur = blur;
+    context.stroke();
+    context.restore();
+  }
+
+  function createLightningCanvas(effect, origin, palette, force = false) {
+    if (state.reducedMotion || (!force && state.intensity < 0.68)) return null;
+    const canvas = document.createElement("canvas");
+    const ratio = Math.min(2, global.devicePixelRatio || 1);
+    const width = Math.max(1, global.innerWidth);
+    const height = Math.max(1, global.innerHeight);
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    canvas.className = "game-effect__lightning-canvas";
+    canvas.style.left = `${-origin.x * width}px`;
+    canvas.style.top = `${-origin.y * height}px`;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const context = canvas.getContext("2d");
+    context.scale(ratio, ratio);
+    const strike = { x: origin.x * width, y: origin.y * height };
+    const starts = [
+      { x: strike.x - width * 0.17, y: -18 },
+      { x: strike.x + width * 0.14, y: -8 }
+    ];
+    starts.forEach((start, boltIndex) => {
+      const main = lightningPath(start, strike, 6, Math.min(110, width * 0.16));
+      strokeLightning(context, main, boltIndex ? palette[1] || "#77d6ff" : "#8ce7ff", 8, 30);
+      strokeLightning(context, main, "rgba(255,255,255,.98)", 2.2, 12);
+      [12, 28, 44].forEach((pointIndex, branchIndex) => {
+        const from = main[Math.min(pointIndex, main.length - 2)];
+        const direction = (branchIndex + boltIndex) % 2 ? -1 : 1;
+        const branchEnd = {
+          x: from.x + direction * (42 + Math.random() * 92),
+          y: from.y + 42 + Math.random() * 72
+        };
+        const branch = lightningPath(from, branchEnd, 4, 34);
+        strokeLightning(context, branch, "rgba(184,234,255,.9)", 1.2, 10);
+      });
+    });
+    effect.appendChild(canvas);
+    if (global.gsap?.timeline) {
+      global.gsap.timeline()
+        .fromTo(canvas, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.055 })
+        .to(canvas, { autoAlpha: 0.12, duration: 0.055 })
+        .to(canvas, { autoAlpha: 1, duration: 0.04 })
+        .to(canvas, { autoAlpha: 0, duration: 0.32, ease: "power2.out" });
+    } else canvas.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 0.1, offset: 0.24 }, { opacity: 1, offset: 0.34 }, { opacity: 0 }], { duration: 560, easing: "ease-out", fill: "forwards" });
+    return canvas;
+  }
+
   function createTextElement(tag, className, text) {
     const element = document.createElement(tag);
     element.className = className;
@@ -466,12 +546,8 @@
         trail.className = "game-effect__fire-trail";
         effect.appendChild(trail);
       }
-      if (level >= 3 && !restrainedAtelier) {
-        for (let index = 0; index < 2; index += 1) {
-          const bolt = document.createElement("div");
-          bolt.className = `game-effect__lightning game-effect__lightning--${index + 1}`;
-          effect.appendChild(bolt);
-        }
+      if ((level >= 3 && !restrainedAtelier) || payload?.forceLightning) {
+        createLightningCanvas(effect, origin, theme.palette, Boolean(payload?.forceLightning));
       }
       if (level >= 4 && !restrainedAtelier) {
         const inferno = document.createElement("div");
