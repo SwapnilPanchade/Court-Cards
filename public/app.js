@@ -141,6 +141,7 @@ let pendingBidValue = null;
 let pendingBidKey = "";
 let roomAvailabilityTimer = null;
 let roomAvailabilityRequest = 0;
+let hukumStoryTimer = null;
 const effectStreaks = {
   trick: { team: null, count: 0 },
   round: { team: null, count: 0 }
@@ -647,6 +648,8 @@ function returnToHome(message = "") {
   state = null;
   pendingBidValue = null;
   pendingBidKey = "";
+  clearTimeout(hukumStoryTimer);
+  hukumStoryTimer = null;
   resetEffectStreaks();
   effectsApi()?.reset();
   game.classList.add("hidden");
@@ -1503,6 +1506,8 @@ function renderPremiumHud() {
   $("#hud-score-b").textContent = state.score[1];
   $("#hud-hands-a").textContent = `${round?.tricks?.[0] || 0} hands`;
   $("#hud-hands-b").textContent = `${round?.tricks?.[1] || 0} hands`;
+  $("#score-a-hands").textContent = `${round?.tricks?.[0] || 0} hands`;
+  $("#score-b-hands").textContent = `${round?.tricks?.[1] || 0} hands`;
   $("#hud-status").textContent = $("#status").textContent;
   $("#hud-contract").innerHTML = `<span>${summary.eyebrow}</span><strong>${summary.title}</strong><small>${summary.detail}</small>`;
   const history = $("#hud-bid-history");
@@ -1511,9 +1516,34 @@ function renderPremiumHud() {
     : "<li class=\"is-empty\">No Hukum passes or bids yet</li>";
 
   const story = $("#hukum-story");
-  const visible = Boolean(round && state.gameType === "court-piece");
-  story.classList.toggle("hidden", !visible);
-  if (visible) story.innerHTML = `<span>${summary.eyebrow}</span><strong>${summary.title}</strong><small>${summary.detail}</small>`;
+  const hukumJustChosen = Boolean(
+    round
+    && state.gameType === "court-piece"
+    && round.trump
+    && (!previousState?.round?.trump || previousState.round.phase === "choosing_trump")
+  );
+  if (hukumJustChosen) {
+    clearTimeout(hukumStoryTimer);
+    story.innerHTML = `<span>${summary.eyebrow}</span><strong>${summary.title}</strong><small>${summary.detail}</small>`;
+    story.classList.remove("hidden");
+    hukumStoryTimer = setTimeout(() => {
+      story.classList.add("hidden");
+      hukumStoryTimer = null;
+    }, 2200);
+  } else if (!hukumStoryTimer) {
+    story.classList.add("hidden");
+  }
+}
+
+function compactHukumLabel(round) {
+  if (!round?.trump) return "";
+  const bid = round.bidState?.contractBid;
+  const callerSeat = bid !== null && bid !== undefined && round.bidState?.decision === "give"
+    ? round.bidState.highestBidder
+    : round.caller;
+  const caller = state.players[callerSeat]?.name || "Caller";
+  const contract = bid !== null && bid !== undefined ? ` · ${bid} hands` : "";
+  return `Hukum ${caller}${contract} · ${symbols[round.trump]}`;
 }
 
 function viewerTeam() {
@@ -1646,13 +1676,13 @@ function render() {
   });
   const trump = $("#trump-badge");
   trump.classList.toggle("hidden", !state.round?.trump);
-  trump.textContent = state.round?.trump ? `Hukum ${symbols[state.round.trump]}` : "";
+  trump.textContent = compactHukumLabel(state.round);
   trump.classList.toggle("red", ["hearts", "diamonds"].includes(state.round?.trump));
   const dealScore = $("#deal-score");
   dealScore.classList.toggle("hidden", !state.round);
   if (state.round) {
     dealScore.innerHTML = state.gameType === "court-piece"
-      ? `<span class="deal-kicker">Hands</span><span class="deal-team deal-team-a">Team A <b>${state.round.tricks[0]}</b></span><i></i><span class="deal-team deal-team-b"><b>${state.round.tricks[1]}</b> Team B</span>`
+      ? `<span class="deal-kicker">Hands</span><span class="deal-team deal-team-a">A <b>${state.round.tricks[0]}</b></span><i></i><span class="deal-team deal-team-b"><b>${state.round.tricks[1]}</b> B</span>`
       : state.gameType === "judgment"
         ? `<span class="deal-kicker">Calls</span><strong>${state.round.calls?.join(" · ") || "—"}</strong>`
         : `<span class="deal-kicker">Rummy</span><span>Stock <b>${state.round.stockCount ?? "—"}</b></span><i></i><span>Discard <b>${state.round.discardTop?.rank || "—"}</b></span>`;
