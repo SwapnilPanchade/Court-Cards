@@ -1537,13 +1537,14 @@ function renderPremiumHud() {
 
 function compactHukumLabel(round) {
   if (!round?.trump) return "";
-  const bid = round.bidState?.contractBid;
+  const bid = round.bidState?.contractBid ?? round.bidState?.highestBid;
   const callerSeat = bid !== null && bid !== undefined && round.bidState?.decision === "give"
     ? round.bidState.highestBidder
     : round.caller;
   const caller = state.players[callerSeat]?.name || "Caller";
-  const contract = bid !== null && bid !== undefined ? ` · ${bid} hands` : "";
-  return `Hukum ${caller}${contract} · ${symbols[round.trump]}`;
+  return bid !== null && bid !== undefined
+    ? `Bid ${bid} · Hukum ${symbols[round.trump]} · ${caller}`
+    : `Hukum ${symbols[round.trump]} · ${caller}`;
 }
 
 function viewerTeam() {
