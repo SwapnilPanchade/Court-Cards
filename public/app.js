@@ -117,11 +117,19 @@ let lastManualHandScrollAt = 0;
 let programmaticHandScrollUntil = 0;
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
 const tableThemes = ["noir", "comic", "neon", "adda", "gully"];
+const gameTypes = ["court-piece", "judgment", "rummy"];
+const gameMeta = {
+  "court-piece": { label: "Court Piece", eyebrow: "COURT PIECE", scoreA: "Team A", scoreB: "Team B" },
+  judgment: { label: "Judgment", eyebrow: "JUDGMENT", scoreA: "P1", scoreB: "P2" },
+  rummy: { label: "Rummy", eyebrow: "RUMMY", scoreA: "P1", scoreB: "P2" }
+};
 const avatarIds = ["kadki-king", "chai-champion", "jugaadu", "sher", "filmy-villain", "office-babu", "cool-aunty", "biker-didi", "glam-queen", "bollywood-boss"];
 const createThemeStorageKey = "courtPieceCreateTheme";
 const avatarStorageKey = "courtPieceAvatar";
 const effectsMutedStorageKey = "courtPieceEffectsMuted";
 const effectsIntensityStorageKey = "courtPieceEffectsIntensity";
+const gameTypeStorageKey = "courtPieceGameType";
+let selectedGameType = normalizeGameType(localStorage.getItem(gameTypeStorageKey) || "court-piece");
 let createTableTheme = normalizeTableTheme(localStorage.getItem(createThemeStorageKey)
   || document.querySelector('input[name="create-table-theme"]:checked')?.value);
 let selectedRoomAvatar = normalizeAvatarId(localStorage.getItem(avatarStorageKey) || storedSession?.avatarId);
@@ -139,6 +147,19 @@ const effectStreaks = {
 function normalizeTableTheme(value) {
   const theme = String(value || "").trim().toLowerCase();
   return tableThemes.includes(theme) ? theme : "noir";
+}
+
+function normalizeGameType(value) {
+  const gameType = String(value || "").trim().toLowerCase();
+  return gameTypes.includes(gameType) ? gameType : "court-piece";
+}
+
+function selectedGame(name = "game-type") {
+  return normalizeGameType(document.querySelector('input[name="' + name + '"]:checked')?.value || selectedGameType);
+}
+
+function gameLabel(gameType = state?.gameType || selectedGameType) {
+  return gameMeta[normalizeGameType(gameType)]?.label || "Court Piece";
 }
 
 function normalizeAvatarId(value) {
@@ -357,6 +378,7 @@ async function enterRoom(kind) {
       const result = await emit("create_room", {
         name,
         avatarId,
+        gameType: selectedGame(),
         tableTheme: selectedTheme("create-table-theme", createTableTheme),
         auctionMode: readAuctionMode($("#create-auction-mode") || $("#auction-mode"), false)
       });
@@ -429,10 +451,24 @@ function pickBotSeat(bots) {
   });
 }
 
+function bindGameSelector() {
+  document.querySelectorAll('input[name="game-type"]').forEach((input) => {
+    input.checked = input.value === selectedGameType;
+    input.onchange = () => {
+      if (!input.checked) return;
+      selectedGameType = normalizeGameType(input.value);
+      localStorage.setItem(gameTypeStorageKey, selectedGameType);
+      document.body.dataset.gameType = selectedGameType;
+    };
+  });
+  document.body.dataset.gameType = selectedGameType;
+}
+
 $("#create-button").addEventListener("click", () => enterRoom("create"));
 $("#join-button").addEventListener("click", () => enterRoom("join"));
 $("#spectate-button").addEventListener("click", () => enterRoom("spectator"));
 $("#room-code").addEventListener("keydown", (event) => { if (event.key === "Enter") enterRoom("join"); });
+bindGameSelector();
 
 $("#start-button").addEventListener("click", () => emit("start_game").catch((error) => setError(gameError, error)));
 $("#fill-bots-button").addEventListener("click", () => emit("fill_bots")
@@ -585,6 +621,7 @@ function renderSeats() {
     const element = $(`#seat-${position}`);
     const isTurn = state.round && (
       state.round.phase === "playing" && state.round.turn === absolute
+      || state.round.phase === "calling" && state.round.turn === absolute
       || state.round.phase === "bidding" && state.round.bidState?.turn === absolute
       || state.round.phase === "auction_decision" && state.round.bidState?.decisionSeat === absolute
       || state.round.phase === "choosing_trump" && state.round.caller === absolute
@@ -610,7 +647,7 @@ function renderSeats() {
       ? `<button class="seat-switch-button secondary" type="button" data-switch-seat="${absolute}">Request switch</button>`
       : "";
     element.innerHTML = player
-      ? `${pile}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${absolute === state.hostSeat ? " <span class=\"bot-tag\">HOST</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">Team ${player.team ? "B" : "A"}</span></div>${switchButton}${cardBacks}`
+      ? `${pile}${avatarMarkup(player)}<div class="seat-nameplate"><span class="seat-player-name">${player.name}${player.bot ? " <span class=\"bot-tag\">BOT</span>" : ""}${absolute === state.hostSeat ? " <span class=\"bot-tag\">HOST</span>" : ""}${!isSpectator() && absolute === state.you.seat ? " (you)" : isSpectator() && absolute === perspectiveSeat() ? " (watching)" : ""}</span><span class="team">${state.gameType === "court-piece" ? `Team ${player.team ? "B" : "A"}` : `Seat ${absolute + 1}`}</span></div>${switchButton}${cardBacks}`
       : `<div class="avatar empty-avatar">+</div><div class="seat-nameplate"><span class="seat-player-name">Empty seat</span></div>`;
     element.querySelector("[data-switch-seat]")?.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -644,13 +681,16 @@ function renderHand() {
     : firstFive ? "Your first five cards" : `Your hand · ${round.hand.length} cards`;
   const leadSuit = round.trick[0]?.card.suit;
   const hasLead = leadSuit && round.hand.some((card) => card.suit === leadSuit);
+  const isRummy = state.gameType === "rummy";
   const sorted = [...round.hand].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || a.value - b.value);
   const mid = (sorted.length - 1) / 2;
   const angleStep = sorted.length > 1 ? Math.min(1.5, 12 / (sorted.length - 1)) : 0;
   hand.innerHTML = sorted.map((card, index) => {
-    const legal = round.phase !== "playing" || !leadSuit || card.suit === leadSuit || !hasLead;
+    const legal = isRummy || round.phase !== "playing" || !leadSuit || card.suit === leadSuit || !hasLead;
     const hiddenChoice = !isSpectator() && round.phase === "choosing_trump" && round.mode === "hidden" && round.caller === state.you.seat;
-    const playable = !isSpectator() && (hiddenChoice || (round.phase === "playing" && round.turn === state.you.seat && legal));
+    const playable = !isSpectator() && (hiddenChoice || (isRummy
+      ? round.phase === "playing" && round.turn === state.you.seat && round.drawnThisTurn
+      : round.phase === "playing" && round.turn === state.you.seat && legal));
     const offset = index - mid;
     const rotate = Math.round(offset * angleStep * 10) / 10;
     const arc = -Math.round(Math.abs(offset) * Math.abs(offset) * 0.2);
@@ -673,6 +713,7 @@ function renderHand() {
     requestAnimationFrame(() => window.scrollTo(0, 0));
     if (isSpectator()) return;
     if (round.phase === "choosing_trump" && round.mode === "hidden") emit("choose_hidden_trump", { cardId: card.dataset.card }).catch((error) => setError(gameError, error));
+    else if (round.phase === "playing" && isRummy) emit("discard_card", { cardId: card.dataset.card }).catch((error) => setError(gameError, error));
     else if (round.phase === "playing") emit("play_card", { cardId: card.dataset.card }).catch((error) => setError(gameError, error));
   }));
 }
@@ -750,6 +791,9 @@ function renderLobbySettings(host) {
   const deckSelect = $("#deck-size");
   const modeSelect = $("#game-mode");
   const auctionControl = $("#auction-mode");
+  const isCourtPiece = state.gameType === "court-piece";
+  document.querySelector("#lobby-panel .settings-grid")?.classList.toggle("hidden", !isCourtPiece);
+  document.querySelector("#lobby-panel .auction-setting")?.classList.toggle("hidden", !isCourtPiece);
   if (deckSelect) {
     const deckSizes = state.options?.deckSizes || [state.settings.deckSize];
     deckSelect.innerHTML = deckSizes.map((size) => `<option value="${size}" ${size === state.settings.deckSize ? "selected" : ""}>${size} cards · ${size / 4} each</option>`).join("");
@@ -950,21 +994,67 @@ function renderBiddingPanel() {
   updateButtons();
 }
 
+function renderJudgmentPanel() {
+  const panel = $("#judgment-panel");
+  if (!panel) return;
+  panel.classList.add("hidden");
+  if (state.gameType !== "judgment" || state.round?.phase !== "calling") return;
+  panel.classList.remove("hidden");
+  const yourTurn = !isSpectator() && state.round.turn === state.you.seat && state.round.calls?.[state.you.seat] === null;
+  const caller = state.players[state.round.turn]?.name || "Player";
+  $("#judgment-call-status").textContent = yourTurn ? "Choose one number. No second chance." : `${caller} is making a call`;
+  const options = $("#judgment-call-options");
+  options.innerHTML = Array.from({ length: 13 }, (_, index) => index + 1).map((call) =>
+    `<button type="button" class="call-option" data-call="${call}" ${yourTurn ? "" : "disabled"}>${call}<small>trick${call === 1 ? "" : "s"}</small></button>`
+  ).join("");
+  options.querySelectorAll("[data-call]").forEach((button) => {
+    button.onclick = () => emit("place_call", { call: Number(button.dataset.call) }).catch((error) => setError(gameError, error));
+  });
+}
+
+function renderRummyPanel() {
+  const panel = $("#rummy-panel");
+  if (!panel) return;
+  panel.classList.add("hidden");
+  if (state.gameType !== "rummy" || state.round?.phase !== "playing") return;
+  panel.classList.remove("hidden");
+  const yourTurn = !isSpectator() && state.round.turn === state.you.seat;
+  const stock = $("#rummy-draw-stock");
+  const discard = $("#rummy-draw-discard");
+  const canDraw = yourTurn && !state.round.drawnThisTurn;
+  stock.disabled = !canDraw;
+  discard.disabled = !canDraw || !state.round.discardTop;
+  $("#rummy-status").textContent = yourTurn
+    ? state.round.drawnThisTurn ? "Now tap one card in your hand to discard." : "Pick a pile to draw from."
+    : `${state.players[state.round.turn]?.name || "Player"} is arranging a hand`;
+  stock.onclick = () => emit("draw_card", { source: "stock" }).catch((error) => setError(gameError, error));
+  discard.onclick = () => emit("draw_card", { source: "discard" }).catch((error) => setError(gameError, error));
+}
+
 function renderPanels() {
   const lobby = $("#lobby-panel");
   const trump = $("#trump-panel");
   const result = $("#round-panel");
   const auction = $("#auction-panel");
+  const judgment = $("#judgment-panel");
+  const rummy = $("#rummy-panel");
   lobby.classList.toggle("hidden", Boolean(state.round) || isSpectator());
   // Keep full lobby setup only before first start; between rounds use seat switch controls.
   if (state.round) lobby.classList.add("hidden");
   trump.classList.add("hidden");
   result.classList.add("hidden");
   auction?.classList.add("hidden");
+  judgment?.classList.add("hidden");
+  rummy?.classList.add("hidden");
   renderTeamPicker();
   renderAvatarPicker();
   renderHostTransfer();
   renderTeamSwitchPanel();
+  document.querySelector(".team-choice-block")?.classList.toggle("hidden", state.gameType !== "court-piece");
+  const lobbyIntro = document.querySelector("#lobby-panel .panel-intro");
+  if (lobbyIntro) lobbyIntro.textContent = state.gameType === "court-piece"
+    ? "Share the code, pick the vibe, then choose your side."
+    : `Share the code and start a ${gameLabel(state.gameType)} table.`;
 
   if (!state.round && !isSpectator()) {
     const count = state.players.filter(Boolean).length;
@@ -988,13 +1078,25 @@ function renderPanels() {
       $("#suit-buttons").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => emit("choose_trump", { suit: button.dataset.suit }).catch((error) => setError(gameError, error))));
     }
     $("#pass-button").classList.toggle("hidden", !state.round.canPass);
+  } else if (state.round?.gameType === "judgment" && state.round.phase === "calling") {
+    renderJudgmentPanel();
+  } else if (state.round?.gameType === "rummy" && state.round.phase === "playing") {
+    renderRummyPanel();
   } else if (state.round?.phase === "round_over") {
     result.classList.remove("hidden");
-    const won = !isSpectator() && state.round.winner === state.players[state.you.seat].team;
+    const won = !isSpectator() && (state.gameType === "court-piece"
+      ? state.round.winner === state.players[state.you.seat].team
+      : state.round.winner === state.you.seat);
     const contract = state.round.bidState?.contractBid
       ? `<br><span class="contract-result ${state.round.bidState.contractMade ? "made" : "failed"}">Team ${state.round.bidState.contractTeam ? "B" : "A"} contract ${state.round.bidState.contractBid} · ${state.round.bidState.contractMade ? "MADE" : "FAILED"}</span>`
       : "";
-    $("#round-result").innerHTML = `<strong>${isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Hands ${state.round.tricks[0]}–${state.round.tricks[1]} · Score ${state.score[0]}–${state.score[1]}${contract}`;
+    if (state.gameType === "court-piece") {
+      $("#round-result").innerHTML = `<strong>${isSpectator() ? `Team ${state.round.winner ? "B" : "A"} wins the deal.` : won ? "Your team wins the deal." : "Other team wins the deal."}</strong><br>Hands ${state.round.tricks[0]}–${state.round.tricks[1]} · Score ${state.score[0]}–${state.score[1]}${contract}`;
+    } else if (state.gameType === "judgment") {
+      $("#round-result").innerHTML = `<strong>${isSpectator() ? `${state.players[state.round.winner]?.name || "Player"} wins the call.` : won ? "You won the call." : "The table has spoken."}</strong><br>Calls ${state.round.calls.join(" · ")} · Tricks ${state.round.tricks.join("–")} · Round ${state.round.roundScores.join(" · ")}`;
+    } else {
+      $("#round-result").innerHTML = `<strong>${isSpectator() ? `${state.players[state.round.winner]?.name || "Player"} declared.` : won ? "You declared a valid hand." : "Someone found the run."}</strong><br>Penalty scores ${state.round.roundScores.join(" · ")}`;
+    }
     $("#next-button").classList.toggle("hidden", isSpectator() || state.you.seat !== state.hostSeat);
     $("#next-button").textContent = "Deal next round";
   }
@@ -1056,6 +1158,9 @@ function renderTimer() {
 function renderStatus() {
   let text = "Waiting for players";
   const round = state.round;
+  if (round?.phase === "calling") {
+    text = !isSpectator() && round.turn === state.you.seat ? "Your call" : `${state.players[round.turn]?.name || "Player"} is calling`;
+  }
   if (round?.phase === "bidding") {
     const bidder = round.bidState?.turn === null ? null : state.players[round.bidState?.turn];
     text = round.bidState?.canBid || round.bidState?.canPass ? "Your bid" : `${bidder?.name || "Player"} is bidding`;
@@ -1167,10 +1272,15 @@ function runGameEffects() {
 
 function render() {
   applyTableTheme(state.tableTheme);
+  const meta = gameMeta[normalizeGameType(state.gameType)];
+  document.body.dataset.gameType = normalizeGameType(state.gameType);
   syncThemeRadios("table-theme", state.tableTheme, isSpectator() || Boolean(state.round) || state.you.seat !== state.hostSeat);
   home.classList.add("hidden");
   game.classList.remove("hidden");
   $("#copy-code").textContent = state.code;
+  $("#game-name").textContent = meta.eyebrow;
+  $("#score-a-label").textContent = meta.scoreA;
+  $("#score-b-label").textContent = meta.scoreB;
   $("#score-a").textContent = state.score[0];
   $("#score-b").textContent = state.score[1];
   [0, 1].forEach((team) => {
@@ -1187,7 +1297,11 @@ function render() {
   const dealScore = $("#deal-score");
   dealScore.classList.toggle("hidden", !state.round || ["choosing_trump", "bidding", "auction_decision"].includes(state.round.phase));
   if (state.round) {
-    dealScore.textContent = `HANDS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`;
+    dealScore.textContent = state.gameType === "court-piece"
+      ? `HANDS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`
+      : state.gameType === "judgment"
+        ? `CALLS  ${state.round.calls?.join(" · ") || "—"}`
+        : `STOCK  ${state.round.stockCount ?? "—"}  ·  DISCARD  ${state.round.discardTop?.rank || "—"}`;
     dealScore.removeAttribute("title");
   }
   $("#center-deck").classList.toggle("hidden", !state.round);

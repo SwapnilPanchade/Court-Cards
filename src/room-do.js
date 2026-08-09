@@ -5,6 +5,9 @@ import {
   cleanName,
   createEmptyRoom,
   createRound,
+  placeGameCall,
+  playGameCard,
+  collectGameTrick,
   decideAuction,
   chooseHiddenTrump,
   chooseRoomAvatar,
@@ -29,6 +32,13 @@ import {
   botAuctionDecision,
   botBid,
   botPlay,
+  botJudgmentCall,
+  botJudgmentCard,
+  pickJudgmentTimeoutCard,
+  botRummyDrawSource,
+  botRummyDiscard,
+  drawRummyCard,
+  discardRummyCard,
   botTrump,
   isBot,
   pickTimeoutCard,
@@ -104,6 +114,7 @@ export class RoomDurableObject {
 
     try {
       this.room = createEmptyRoom(code, host, {
+        gameType: body.gameType,
         tableTheme: body.tableTheme,
         auctionMode: body.auctionMode
       });
@@ -112,6 +123,7 @@ export class RoomDurableObject {
         ok: true,
         code,
         token,
+        gameType: this.room.gameType,
         tableTheme: this.room.tableTheme,
         auctionMode: this.room.settings.auctionMode,
         avatarId: host.avatarId
@@ -227,6 +239,8 @@ export class RoomDurableObject {
         return this.doTransferHost(ws, payload);
       case "place_bid":
         return this.doPlaceBid(ws, payload);
+      case "place_call":
+        return this.doPlaceCall(ws, payload);
       case "pass_bid":
         return this.doPassBid(ws);
       case "decide_auction":
@@ -241,6 +255,10 @@ export class RoomDurableObject {
         return this.doRevealTrump(ws);
       case "play_card":
         return this.doPlayCard(ws, payload);
+      case "draw_card":
+        return this.doDrawCard(ws, payload);
+      case "discard_card":
+        return this.doDiscardCard(ws, payload);
       case "next_round":
         return this.nextRound(ws);
       case "request_restart":
@@ -463,6 +481,17 @@ export class RoomDurableObject {
     return {};
   }
 
+  async doPlaceCall(ws, payload) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room?.round) throw new Error("No active round.");
+    placeGameCall(room.round, session.seat, payload.call);
+    await this.saveRoom();
+    this.broadcast();
+    await this.scheduleAfterStateChange();
+    return {};
+  }
+
   async doPassBid(ws) {
     const session = this.requirePlayer(ws);
     const room = await this.loadRoom();
@@ -533,7 +562,30 @@ export class RoomDurableObject {
     const session = this.requirePlayer(ws);
     const room = await this.loadRoom();
     if (!room?.round) throw new Error("No active round.");
-    playCard(room.round, session.seat, payload.cardId);
+    playGameCard(room.round, session.seat, payload.cardId);
+    await this.saveRoom();
+    this.broadcast();
+    await this.scheduleAfterStateChange();
+    return {};
+  }
+
+  async doDrawCard(ws, payload) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room?.round || room.gameType !== "rummy") throw new Error("Rummy is not active.");
+    drawRummyCard(room.round, session.seat, payload.source || "stock");
+    await this.saveRoom();
+    this.broadcast();
+    await this.scheduleAfterStateChange();
+    return {};
+  }
+
+  async doDiscardCard(ws, payload) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room?.round || room.gameType !== "rummy") throw new Error("Rummy is not active.");
+    discardRummyCard(room.round, session.seat, payload.cardId);
+    if (room.round.phase === "round_over") recordRoundResult(room, room.round);
     await this.saveRoom();
     this.broadcast();
     await this.scheduleAfterStateChange();
@@ -656,7 +708,8 @@ export class RoomDurableObject {
       return;
     }
 
-    const botSeat = round.phase === "bidding" ? round.bidState?.turn
+    const botSeat = round.phase === "calling" ? round.turn
+      : round.phase === "bidding" ? round.bidState?.turn
       : round.phase === "auction_decision" ? round.bidState?.decisionSeat
         : round.phase === "choosing_trump" ? round.caller
           : round.phase === "playing" ? round.turn : null;
@@ -691,7 +744,7 @@ export class RoomDurableObject {
 
     if (alarm.kind === "collect") {
       if (round.phase !== "trick_complete") return;
-      collectTrick(round);
+      collectGameTrick(round);
       if (round.phase === "round_over") recordRoundResult(room, round);
       room.alarm = null;
       await this.saveRoom();
@@ -703,7 +756,14 @@ export class RoomDurableObject {
     if (alarm.kind === "bot") {
       const botSeat = alarm.seat;
       if (!isBot(room, botSeat)) return;
-      if (round.phase === "bidding" && round.bidState?.turn === botSeat) {
+      if (round.gameType === "judgment" && round.phase === "calling" && round.turn === botSeat) {
+        placeGameCall(round, botSeat, botJudgmentCall(round, botSeat));
+      } else if (round.gameType === "judgment" && round.phase === "playing" && round.turn === botSeat) {
+        playGameCard(round, botSeat, botJudgmentCard(round, botSeat).id);
+      } else if (round.gameType === "rummy" && round.phase === "playing" && round.turn === botSeat) {
+        if (!round.drawnThisTurn) drawRummyCard(round, botSeat, botRummyDrawSource(round));
+        else discardRummyCard(round, botSeat, botRummyDiscard(round, botSeat).id);
+      } else if (round.phase === "bidding" && round.bidState?.turn === botSeat) {
         const bid = botBid(round, botSeat);
         if (bid === null) passBid(round, botSeat);
         else placeBid(round, botSeat, bid);
@@ -714,7 +774,7 @@ export class RoomDurableObject {
         else chooseTrump(round, botSeat, botTrump(round, botSeat));
       } else if (round.phase === "playing" && round.turn === botSeat) {
         const card = botPlay(round, botSeat);
-        playCard(round, botSeat, card.id);
+        playGameCard(round, botSeat, card.id);
       } else {
         room.alarm = null;
         await this.saveRoom();
@@ -729,9 +789,20 @@ export class RoomDurableObject {
 
     if (alarm.kind === "turn") {
       const expectedSeat = alarm.seat;
-      if (round.phase !== "playing" || round.turn !== expectedSeat || isBot(room, expectedSeat)) return;
-      const selected = pickTimeoutCard(round, expectedSeat);
-      playCard(round, expectedSeat, selected.id);
+      if (round.turn !== expectedSeat || isBot(room, expectedSeat)) return;
+      if (round.gameType === "judgment" && round.phase === "calling") {
+        placeGameCall(round, expectedSeat, botJudgmentCall(round, expectedSeat));
+      } else if (round.gameType === "judgment" && round.phase === "playing") {
+        const selected = pickJudgmentTimeoutCard(round, expectedSeat);
+        playGameCard(round, expectedSeat, selected.id);
+      } else if (round.gameType === "rummy" && round.phase === "playing") {
+        if (!round.drawnThisTurn) drawRummyCard(round, expectedSeat, "stock");
+        else discardRummyCard(round, expectedSeat, botRummyDiscard(round, expectedSeat).id);
+      } else if (round.phase === "playing") {
+        const selected = pickTimeoutCard(round, expectedSeat);
+        playGameCard(round, expectedSeat, selected.id);
+      } else return;
+      if (round.phase === "round_over") recordRoundResult(room, round);
       room.alarm = null;
       await this.saveRoom();
       this.broadcast();

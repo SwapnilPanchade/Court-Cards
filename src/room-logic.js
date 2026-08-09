@@ -2,7 +2,7 @@ import {
   SUITS,
   DECK_SIZES,
   MODES,
-  createRound,
+  createRound as createCourtPieceRound,
   placeBid,
   passBid,
   decideAuction,
@@ -14,8 +14,26 @@ import {
   collectTrick,
   teamForSeat
 } from "./game.js";
+import {
+  createJudgmentRound,
+  placeJudgmentCall,
+  playJudgmentCard,
+  collectJudgmentTrick,
+  botJudgmentCall,
+  botJudgmentCard,
+  pickJudgmentTimeoutCard
+} from "./judgment.js";
+import {
+  createRummyRound,
+  drawRummyCard,
+  discardRummyCard,
+  botRummyDrawSource,
+  botRummyDiscard
+} from "./rummy.js";
 
 export const TABLE_THEMES = ["noir", "comic", "neon", "adda", "gully"];
+export const GAME_TYPES = ["court-piece", "judgment", "rummy"];
+export const DEFAULT_GAME_TYPE = "court-piece";
 export const DEFAULT_TABLE_THEME = "noir";
 export const AVATAR_IDS = Object.freeze([
   "kadki-king",
@@ -102,15 +120,45 @@ export function normalizeTeam(value) {
   throw new Error("Choose Team A or Team B.");
 }
 
+export function normalizeGameType(value, fallback = DEFAULT_GAME_TYPE) {
+  const gameType = String(value || fallback).trim().toLowerCase();
+  if (!GAME_TYPES.includes(gameType)) throw new Error("Choose a valid game.");
+  return gameType;
+}
+
+export function createRound(dealer, settings = {}, random = Math.random) {
+  const gameType = normalizeGameType(settings.gameType);
+  if (gameType === "judgment") return createJudgmentRound(dealer, random);
+  if (gameType === "rummy") return createRummyRound(dealer, random);
+  return createCourtPieceRound(dealer, settings, random);
+}
+
+export function placeGameCall(round, seat, value) {
+  if (round.gameType === "judgment") return placeJudgmentCall(round, seat, value);
+  throw new Error("This game does not use calls.");
+}
+
+export function playGameCard(round, seat, cardId) {
+  if (round.gameType === "judgment") return playJudgmentCard(round, seat, cardId);
+  return playCard(round, seat, cardId);
+}
+
+export function collectGameTrick(round) {
+  if (round.gameType === "judgment") return collectJudgmentTrick(round);
+  return collectTrick(round);
+}
+
 export function createEmptyRoom(code, hostPlayer, options = {}) {
+  const gameType = normalizeGameType(options.gameType);
   const room = {
     code,
+    gameType,
     players: [hostPlayer, null, null, null],
     spectators: [],
     hostSeat: 0,
     dealer: 3,
     round: null,
-    score: [0, 0],
+    score: gameType === "court-piece" ? [0, 0] : [0, 0, 0, 0],
     matchTarget: null,
     matchWinner: null,
     restartVote: null,
@@ -120,7 +168,8 @@ export function createEmptyRoom(code, hostPlayer, options = {}) {
     settings: {
       deckSize: DEFAULT_DECK_SIZE,
       mode: DEFAULT_MODE,
-      auctionMode: false
+      auctionMode: false,
+      gameType
     },
     settingsLocked: false,
     destroyed: false,
@@ -142,6 +191,7 @@ export function updateRoomSettings(room, seat, updates = {}) {
   const auctionMode = updates.auctionMode === undefined ? Boolean(room.settings.auctionMode) : updates.auctionMode;
   const tableTheme = updates.tableTheme === undefined ? (room.tableTheme || DEFAULT_TABLE_THEME) : updates.tableTheme;
 
+  if (room.gameType && room.gameType !== "court-piece") return room;
   if (!DECK_SIZES.includes(deckSize) || !MODES.includes(mode)) throw new Error("Choose valid game settings.");
   if (typeof auctionMode !== "boolean") throw new Error("Auction mode must be on or off.");
   if (!TABLE_THEMES.includes(tableTheme)) throw new Error("Choose a valid table theme.");
@@ -179,6 +229,13 @@ export function chooseRoomAvatar(room, seat, requestedAvatarId) {
 }
 
 export function recordRoundResult(room, round) {
+  if (room.gameType && room.gameType !== "court-piece") {
+    if (!round || round.phase !== "round_over" || round.resultRecorded) return null;
+    round.resultRecorded = true;
+    room.score = (round.roundScores || room.score).map((score, seat) => Number((room.score[seat] + score).toFixed(1)));
+    room.matchWinner = round.winner;
+    return null;
+  }
   if (!round || (round.winner !== 0 && round.winner !== 1)) throw new Error("Round winner is not resolved.");
   if (round.resultRecorded) return null;
   round.resultRecorded = true;
@@ -362,6 +419,7 @@ export function joinAsPlayer(room, {
 export function publicRoomInfo(room) {
   return {
     code: room.code,
+    gameType: room.gameType,
     started: Boolean(room.round),
     settingsLocked: Boolean(room.settingsLocked || room.round),
     emptySeats: emptySeats(room),
@@ -399,6 +457,7 @@ export function roomView(room, viewer) {
 
   return {
     code: room.code,
+    gameType: room.gameType,
     hostSeat: room.hostSeat,
     you: isPlayer
       ? { role: "player", seat: viewerSeat, token: player.token }
@@ -422,7 +481,7 @@ export function roomView(room, viewer) {
     ),
     score: room.score,
     matchTarget: null,
-    matchWinner: null,
+    matchWinner: room.matchWinner,
     tableTheme: room.tableTheme,
     restartVote: room.restartVote,
     teamSwitchRequest: room.teamSwitchRequest,
@@ -432,6 +491,7 @@ export function roomView(room, viewer) {
       watchingSeat: spectator.watchingSeat
     })),
     round: round && {
+      gameType: room.gameType,
       phase: round.phase,
       dealer: round.dealer,
       caller: round.caller,
@@ -466,6 +526,11 @@ export function roomView(room, viewer) {
         canKeep: isPlayer && round.phase === "auction_decision" && round.bidState.decisionSeat === viewerSeat,
         canGive: isPlayer && round.phase === "auction_decision" && round.bidState.decisionSeat === viewerSeat
       },
+      calls: round.calls || null,
+      roundScores: round.roundScores || null,
+      stockCount: round.stock?.length ?? null,
+      discardTop: round.discard?.at(-1) || null,
+      drawnThisTurn: round.drawnThisTurn ?? false,
       trump: round.trumpRevealed || (isPlayer && round.caller === viewerSeat) ? round.trump : null,
       trumpRevealed: round.trumpRevealed,
       canRevealTrump: isPlayer && round.mode === "hidden" && !round.trumpRevealed && round.turn === viewerSeat && (viewerSeat === round.caller && !round.trick.length || (round.trick.length && !round.hands[viewerSeat].some((card) => card.suit === round.trick[0].card.suit))),
@@ -483,7 +548,7 @@ export function roomView(room, viewer) {
     suits: SUITS,
     settings: room.settings,
     settingsLocked: Boolean(room.settingsLocked || room.round),
-    options: { deckSizes: DECK_SIZES, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS }
+    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS }
   };
 }
 
@@ -554,7 +619,6 @@ export function pickTimeoutCard(round, seat, randomInt = (max) => Math.floor(Mat
 }
 
 export {
-  createRound,
   placeBid,
   passBid,
   decideAuction,
@@ -564,6 +628,13 @@ export {
   revealTrump,
   playCard,
   collectTrick,
+  drawRummyCard,
+  discardRummyCard,
+  botJudgmentCall,
+  botJudgmentCard,
+  pickJudgmentTimeoutCard,
+  botRummyDrawSource,
+  botRummyDiscard,
   teamForSeat,
   SUITS,
   DECK_SIZES,

@@ -9,7 +9,7 @@
     "start": "wrangler dev",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node --test test/game.test.js test/room-logic.test.js",
+    "test": "node --test test/game.test.js test/room-logic.test.js test/new-games.test.js",
     "smoke": "node test/ws-smoke.js"
   },
   "engines": {

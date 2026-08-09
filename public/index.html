@@ -15,11 +15,18 @@
     <div class="noise" aria-hidden="true"></div>
     <main id="app">
       <section id="home" class="home shell">
+        <div class="home-ambient" aria-hidden="true">
+          <span class="ambient-orbit ambient-orbit-one"></span>
+          <span class="ambient-orbit ambient-orbit-two"></span>
+          <span class="ambient-cross ambient-cross-one">+</span>
+          <span class="ambient-cross ambient-cross-two">+</span>
+        </div>
         <div class="home-copy">
           <div class="brand-mark" aria-hidden="true">♠</div>
           <p class="eyebrow">Private table · friends or bots</p>
           <h1>Court<br /><span>Piece</span></h1>
           <p class="lede">Call the hukum. Read the table. Take the match.</p>
+          <div class="home-signal"><span><i></i> 03 GAMES</span><span>4 PLAYER TABLE</span><span>NO ACCOUNT</span></div>
           <div class="home-table-preview" aria-hidden="true">
             <span class="preview-seat preview-seat-top"></span>
             <span class="preview-seat preview-seat-left"></span>
@@ -39,6 +46,24 @@
             </div>
             <span class="live-chip"><i></i> Live rooms</span>
           </div>
+
+          <fieldset class="game-selector" aria-labelledby="game-selector-title">
+            <legend id="game-selector-title">Choose your game</legend>
+            <div class="game-selector-grid">
+              <input class="visually-hidden" type="radio" name="game-type" id="game-type-court-piece" value="court-piece" checked />
+              <label class="game-mode-card game-mode-card-court" for="game-type-court-piece">
+                <span class="game-mode-icon">♠</span><span><strong>Court Piece</strong><small>Teams · Hukum · Adda</small></span><i>PLAY</i>
+              </label>
+              <input class="visually-hidden" type="radio" name="game-type" id="game-type-judgment" value="judgment" />
+              <label class="game-mode-card game-mode-card-judgment" for="game-type-judgment">
+                <span class="game-mode-icon">✦</span><span><strong>Judgment</strong><small>Call your tricks</small></span><i>CALL</i>
+              </label>
+              <input class="visually-hidden" type="radio" name="game-type" id="game-type-rummy" value="rummy" />
+              <label class="game-mode-card game-mode-card-rummy" for="game-type-rummy">
+                <span class="game-mode-icon">◆</span><span><strong>Rummy</strong><small>Build the perfect hand</small></span><i>FORM</i>
+              </label>
+            </div>
+          </fieldset>
 
           <label for="name">Your name</label>
           <input id="name" maxlength="18" autocomplete="name" placeholder="e.g. Swapnil" />
@@ -153,10 +178,11 @@
           </div>
 
           <div class="header-center">
+            <div id="game-name" class="game-name">COURT PIECE</div>
             <div class="scoreboard">
-              <span>Team A <b id="score-a">0</b></span>
+              <span><b id="score-a-label">Team A</b> <b id="score-a">0</b></span>
               <i></i>
-              <span>Team B <b id="score-b">0</b></span>
+              <span><b id="score-b-label">Team B</b> <b id="score-b">0</b></span>
               <small><svg class="icon trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"/></svg>Match</small>
             </div>
           </div>
@@ -373,6 +399,23 @@
           </div>
         </section>
 
+        <section id="judgment-panel" class="panel judgment-panel hidden" aria-labelledby="judgment-title">
+          <p class="eyebrow">JUDGMENT CALL</p>
+          <h2 id="judgment-title">How many tricks?</h2>
+          <p id="judgment-call-status" class="panel-intro">Read your hand. Make one honest call.</p>
+          <div id="judgment-call-options" class="call-options" aria-label="Choose your call"></div>
+        </section>
+
+        <section id="rummy-panel" class="panel rummy-panel hidden" aria-labelledby="rummy-title">
+          <p class="eyebrow">RUMMY TABLE</p>
+          <h2 id="rummy-title">Draw, arrange, discard.</h2>
+          <p id="rummy-status" class="panel-intro">Build two sequences, including one pure sequence.</p>
+          <div class="rummy-actions">
+            <button id="rummy-draw-stock" class="primary" type="button">Draw stock</button>
+            <button id="rummy-draw-discard" class="secondary" type="button">Take discard</button>
+          </div>
+        </section>
+
         <button id="reveal-button" class="reveal-button hidden">Reveal hukum</button>
 
         <section id="round-panel" class="panel round-panel hidden">
@@ -401,5 +444,6 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="effects.js"></script>
     <script src="app.js"></script>
+    <script type="module" src="motion.js"></script>
   </body>
 </html>
