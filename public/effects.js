@@ -1,7 +1,7 @@
 (function installGameEffects(global) {
   "use strict";
 
-  const THEME_NAMES = ["noir", "comic", "neon", "adda", "gully"];
+  const THEME_NAMES = ["noir", "comic", "neon", "adda", "gully", "atelier"];
   const THEME_CLASSES = THEME_NAMES.map((name) => `game-effects--theme-${name}`);
   const INTENSITY_PRESETS = {
     off: 0,
@@ -71,6 +71,18 @@
       court: "COURT MAAR DI!",
       match: "GAME APNA!",
       symbols: { card: "✦", cut: "⚡", trick: "♠", round: "●", court: "♛", match: "★" }
+    },
+    atelier: {
+      palette: ["#f5ead1", "#d8aa55", "#1c6a59", "#244b7a", "#171511"],
+      accent: "#d8aa55",
+      card: "PLAY",
+      cut: "HUKUM RISES",
+      aceCut: "EKKA OVERRULED",
+      trick: "TRICK LOCKED",
+      round: "ATELIER WON",
+      court: "COURT CRAFTED",
+      match: "MASTER OF THE TABLE",
+      symbols: { card: "PLAY", cut: "CUT", trick: "WIN", round: "HAND", court: "COURT", match: "MATCH" }
     }
   };
 
@@ -319,6 +331,65 @@
     return element;
   }
 
+  function cloneAtelierCard(source, className) {
+    if (!source?.isConnected) return null;
+    const rect = source.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const clone = source.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.removeAttribute("data-seat");
+    clone.removeAttribute("data-owner");
+    clone.classList.remove("played-card", "playable", "dealt");
+    clone.classList.add("atelier-cut-card", ...String(className).split(/\s+/).filter(Boolean));
+    clone.setAttribute("aria-hidden", "true");
+    clone.tabIndex = -1;
+    if ("disabled" in clone) clone.disabled = true;
+    clone.style.width = rect.width + "px";
+    clone.style.height = rect.height + "px";
+    return { node: clone, rect };
+  }
+
+  function createAtelierCutScene(effect, payload, origin) {
+    if (currentTheme() !== "atelier" || state.reducedMotion || !payload?.aceCut) return null;
+    const aceLeft = cloneAtelierCard(payload.aceElement, "atelier-ace-fragment atelier-ace-fragment--left");
+    const aceRight = cloneAtelierCard(payload.aceElement, "atelier-ace-fragment atelier-ace-fragment--right");
+    const hukum = cloneAtelierCard(payload.element, "atelier-hukum-rise");
+    if (!aceLeft || !aceRight || !hukum) return null;
+
+    const anchorX = origin.x * global.innerWidth;
+    const anchorY = origin.y * global.innerHeight;
+    const aceX = aceLeft.rect.left + aceLeft.rect.width / 2 - anchorX;
+    const aceY = aceLeft.rect.top + aceLeft.rect.height / 2 - anchorY;
+    const hukumX = hukum.rect.left + hukum.rect.width / 2 - anchorX;
+    const hukumY = hukum.rect.top + hukum.rect.height / 2 - anchorY;
+    const scene = document.createElement("div");
+    scene.className = "atelier-cut-scene";
+    scene.style.setProperty("--atelier-ace-x", aceX + "px");
+    scene.style.setProperty("--atelier-ace-y", aceY + "px");
+    scene.style.setProperty("--atelier-hukum-x", hukumX + "px");
+    scene.style.setProperty("--atelier-hukum-y", hukumY + "px");
+    scene.appendChild(aceLeft.node);
+    scene.appendChild(aceRight.node);
+    scene.appendChild(hukum.node);
+
+    const cutLine = document.createElement("span");
+    cutLine.className = "atelier-cut-line";
+    cutLine.setAttribute("aria-hidden", "true");
+    scene.appendChild(cutLine);
+    effect.appendChild(scene);
+
+    const hiddenSources = [payload.aceElement, payload.element]
+      .filter(Boolean)
+      .map((element) => ({ element, opacity: element.style.opacity }));
+    hiddenSources.forEach(({ element }) => { element.style.opacity = "0"; });
+    return {
+      node: scene,
+      cleanup() {
+        hiddenSources.forEach(({ element, opacity }) => { element.style.opacity = opacity; });
+      }
+    };
+  }
+
   function createEffect(type, payload, copy, options = {}) {
     if (state.intensity <= 0 || !ensureRoot()) return null;
 
@@ -335,6 +406,7 @@
     const origin = resolveOrigin(payload);
     const celebration = options.celebration || null;
     const tier = celebrationTier(type);
+    const restrainedAtelier = themeName === "atelier";
     const id = `game-effect-${++state.effectSequence}`;
 
     const effect = document.createElement("div");
@@ -379,27 +451,29 @@
       flash.style.setProperty("--game-effect-flash", celebration?.accent || theme.accent);
       effect.appendChild(flash);
 
-      const burst = document.createElement("div");
-      burst.className = "game-effect__burst";
-      effect.appendChild(burst);
+      if (!restrainedAtelier) {
+        const burst = document.createElement("div");
+        burst.className = "game-effect__burst";
+        effect.appendChild(burst);
 
-      const ring = document.createElement("div");
-      ring.className = "game-effect__ring";
-      effect.appendChild(ring);
+        const ring = document.createElement("div");
+        ring.className = "game-effect__ring";
+        effect.appendChild(ring);
+      }
 
-      if (level >= 2) {
+      if (level >= 2 && !restrainedAtelier) {
         const trail = document.createElement("div");
         trail.className = "game-effect__fire-trail";
         effect.appendChild(trail);
       }
-      if (level >= 3) {
+      if (level >= 3 && !restrainedAtelier) {
         for (let index = 0; index < 2; index += 1) {
           const bolt = document.createElement("div");
           bolt.className = `game-effect__lightning game-effect__lightning--${index + 1}`;
           effect.appendChild(bolt);
         }
       }
-      if (level >= 4) {
+      if (level >= 4 && !restrainedAtelier) {
         const inferno = document.createElement("div");
         inferno.className = "game-effect__inferno";
         effect.appendChild(inferno);
@@ -413,11 +487,17 @@
       }
     }
 
+    const atelierScene = themeName === "atelier" && type === "trump-cut" && payload?.aceCut
+      ? createAtelierCutScene(effect, payload, origin)
+      : null;
+
     const callout = document.createElement("div");
     callout.className = "game-effect__callout";
     const eyebrow = options.compact
       ? ""
-      : `${levelData.label}${streak > 1 ? ` · ${streak}×` : ""}`;
+      : themeName === "atelier" && type === "trump-cut"
+        ? "ATELIER MECHANISM"
+        : `${levelData.label}${streak > 1 ? ` · ${streak}×` : ""}`;
     if (eyebrow) callout.appendChild(createTextElement("span", "game-effect__eyebrow", eyebrow));
     callout.appendChild(createTextElement("span", "game-effect__symbol", copy.symbol));
     callout.appendChild(createTextElement("strong", "game-effect__title", copy.title));
@@ -431,7 +511,7 @@
     state.stage.appendChild(effect);
     state.root.classList.add("game-effects--active");
 
-    const record = { id, node: effect, timeline: null, animation: null, timer: null };
+    const record = { id, node: effect, timeline: null, animation: null, timer: null, cleanup: atelierScene?.cleanup || null };
     state.activeEffects.set(id, record);
     global.requestAnimationFrame(() => effect.isConnected && effect.classList.add("is-active"));
     animateEffect(record, options.duration || effectDuration(type));
@@ -440,6 +520,7 @@
 
   function createParticles(effect, palette, level, type) {
     if (state.reducedMotion || state.intensity < 0.25 || type === "card") return;
+    if (currentTheme() === "atelier" && type === "trump-cut") return;
     const typeBase = {
       "trump-cut": 5,
       "trick-win": 4,
@@ -486,6 +567,9 @@
 
     if (gsap?.timeline) {
       try {
+        const atelierAceScene = effect.dataset.theme === "atelier"
+          && effect.dataset.effect === "trump-cut"
+          && effect.querySelector(".atelier-cut-scene");
         let timeline;
         timeline = gsap.timeline({
           onComplete: () => {
@@ -504,7 +588,7 @@
           timeline.fromTo(callout,
             { autoAlpha: 0, scale: 0.7, y: 18 },
             { autoAlpha: 1, scale: 1, y: 0, duration: 0.28, ease: "back.out(2)" },
-            0.02
+            atelierAceScene ? 0.72 : 0.02
           );
           timeline.to(callout, { autoAlpha: 0, scale: 1.06, y: -16, duration: 0.28, ease: "power2.in" }, Math.max(0.45, duration / 1000 - 0.3));
         }
@@ -538,6 +622,7 @@
       try { record.timeline?.kill(); } catch (_) { /* optional dependency */ }
       try { record.animation?.cancel(); } catch (_) { /* Web Animations fallback */ }
     }
+    try { record.cleanup?.(); } catch (_) { /* DOM may already be gone after a trick resolves. */ }
     record.node?.remove();
     if (state.activeEffects.size === 0) state.root?.classList.remove("game-effects--active");
   }
@@ -589,7 +674,8 @@
       comic: { type: "square", ratio: 1.12 },
       neon: { type: "sawtooth", ratio: 1.28 },
       adda: { type: "triangle", ratio: 1 },
-      gully: { type: "square", ratio: 0.92 }
+      gully: { type: "square", ratio: 0.92 },
+      atelier: { type: "triangle", ratio: 0.78 }
     }[themeName];
     const patterns = {
       card: [[0, 0.045, 520, 720, 0.035]],
@@ -739,14 +825,16 @@
   }
 
   function runEvent(type, payload = {}, options = {}) {
-    const celebration = WIN_EFFECT_TYPES.has(type) ? selectCelebration(payload) : null;
+    const celebration = WIN_EFFECT_TYPES.has(type) && currentTheme() !== "atelier"
+      ? selectCelebration(payload)
+      : null;
     const effectOptions = celebration ? { ...options, celebration } : options;
     const copy = effectCopy(type, payload, celebration);
     const effect = createEffect(type, payload, copy, effectOptions);
     if (!effect) return false;
 
     const local = payload.isLocal !== false;
-    if (type !== "card") fireConfetti(type, effect, local);
+    if (type !== "card" && !(currentTheme() === "atelier" && type === "trump-cut")) fireConfetti(type, effect, local);
     const audioKind = local ? options.audio || type : "loss";
     playSting(audioKind, options.priority ?? 1, celebration);
     return effect.id;
@@ -796,11 +884,16 @@
   }
 
   function onCardPlay(payload = {}) {
+    // Atelier already moves the live card from the player's hand/seat into the
+    // physical table. A second full-screen "PLAY" burst competes with that
+    // motion and makes the premium table feel cheaper.
+    if (currentTheme() === "atelier") return false;
     return runEvent("card", payload, { compact: true, duration: 520, audio: "card", priority: 0 });
   }
 
   function onTrumpCut(payload = {}) {
-    return runEvent("trump-cut", payload, { duration: 1250, audio: payload.aceCut ? "ace" : "cut", priority: 2 });
+    const duration = currentTheme() === "atelier" && payload.aceCut ? 1850 : 1250;
+    return runEvent("trump-cut", payload, { duration, audio: payload.aceCut ? "ace" : "cut", priority: 2 });
   }
 
   function onTrickWin(payload = {}) {

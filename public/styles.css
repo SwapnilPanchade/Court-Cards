@@ -1985,3 +1985,427 @@ body::before {
   .rummy-panel, .judgment-panel, .trump-panel { max-height: calc(100dvh - 148px); }
   .hand { min-height: 82px; padding-top: 3px; }
 }
+
+/* Hukum Atelier ---------------------------------------------------------
+   A new opt-in table identity. Existing themes keep their original layout
+   and effects; only the checked Atelier radio activates this surface. */
+.home:has(#create-theme-atelier:checked),
+.game:has(#theme-atelier:checked) {
+  --bg: #16110b;
+  --bg-2: #322419;
+  --surface: rgba(22, 21, 19, .9);
+  --surface-solid: #171511;
+  --surface-2: #2b271f;
+  --felt-1: #e9dcc0;
+  --felt-2: #cbbd9d;
+  --felt-deep: #1e6a59;
+  --rim: #6d4921;
+  --ink: #fff4dc;
+  --muted: #d2c3a6;
+  --accent: #d8aa55;
+  --accent-soft: #f5d58d;
+  --accent-ink: #24190c;
+  --accent-2: #244b7a;
+  --team-a: #b4d35f;
+  --team-b: #78a7e2;
+  --red: #c94b43;
+  --line: rgba(232, 193, 113, .38);
+  --radius: 13px;
+  --shadow: 0 26px 72px rgba(22, 12, 5, .56);
+  --font-display: "Fraunces", serif;
+}
+
+.theme-choice-atelier .theme-swatch {
+  color: #f4d486;
+  background-color: #175d50;
+  background-image: url("assets/tables/atelier.webp");
+  background-position: center;
+  background-size: cover;
+  box-shadow: inset 0 0 0 1px rgba(248, 220, 162, .48), inset 0 -12px 20px rgba(27, 15, 7, .28);
+}
+
+.home:has(#create-theme-atelier:checked) {
+  background:
+    radial-gradient(circle at 17% 18%, rgba(216, 170, 85, .2), transparent 30rem),
+    radial-gradient(circle at 82% 72%, rgba(32, 105, 88, .2), transparent 27rem),
+    linear-gradient(135deg, #2a1d12, #0d0b09 68%);
+}
+.home:has(#create-theme-atelier:checked) .brand-mark {
+  border-color: rgba(245, 213, 141, .46);
+  color: #f5d58d;
+  background: linear-gradient(145deg, rgba(216, 170, 85, .24), rgba(25, 87, 72, .16));
+  box-shadow: 0 22px 52px rgba(0, 0, 0, .46), inset 0 1px rgba(255, 244, 220, .34), 0 0 0 7px rgba(216, 170, 85, .04);
+}
+
+.game:has(#theme-atelier:checked) {
+  background: #0c0906;
+}
+.game:has(#theme-atelier:checked)::before,
+.game:has(#theme-atelier:checked)::after { display: none; }
+.game:has(#theme-atelier:checked) .scene-layer { display: none; }
+.game:has(#theme-atelier:checked) .table {
+  border-color: #b58a43;
+  background-color: #e8dbc1;
+  background-image: url("assets/tables/atelier.webp");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: 0 0 0 3px rgba(222, 179, 92, .42), 0 28px 64px rgba(0, 0, 0, .52);
+}
+.game:has(#theme-atelier:checked) .table::before,
+.game:has(#theme-atelier:checked) .table::after { display: none; }
+.game:has(#theme-atelier:checked) .center-deck { display: none !important; }
+.game:has(#theme-atelier:checked) .panel {
+  border-color: rgba(232, 193, 113, .36);
+  background: linear-gradient(145deg, rgba(28, 25, 20, .96), rgba(12, 12, 11, .92));
+  box-shadow: 0 28px 70px rgba(0, 0, 0, .56), inset 0 1px rgba(255, 244, 220, .12);
+}
+
+.game:has(#theme-atelier:checked) .avatar[data-profile-replacement="true"] {
+  overflow: hidden;
+  border: 3px solid #e2bc70;
+  background: #213b35;
+  box-shadow: 0 0 0 4px #3a2b18, 0 8px 18px rgba(0, 0, 0, .5), inset 0 1px rgba(255, 246, 217, .52);
+  isolation: isolate;
+}
+.game:has(#theme-atelier:checked) .avatar[data-profile-replacement="true"]::before {
+  inset: 0;
+  z-index: 2;
+  background-image: var(--avatar-image);
+  background-position: center 28%;
+  background-size: 142%;
+}
+.game:has(#theme-atelier:checked) .avatar[data-profile-replacement="true"]::after {
+  position: absolute;
+  z-index: 3;
+  inset: 2px;
+  border: 1px solid rgba(255, 240, 201, .34);
+  border-radius: inherit;
+  box-shadow: inset 0 -10px 16px rgba(22, 12, 6, .24);
+  content: "";
+  pointer-events: none;
+}
+.game:has(#theme-atelier:checked) .avatar-fallback { opacity: 0; }
+.game:has(#theme-atelier:checked) .seat-nameplate {
+  border-color: rgba(227, 190, 113, .46);
+  color: #fff1d1;
+  background: rgba(18, 18, 16, .88);
+  box-shadow: 0 7px 18px rgba(20, 12, 5, .42), inset 0 1px rgba(255, 244, 220, .08);
+}
+.game:has(#theme-atelier:checked) .seat .team { color: #e2bc70; }
+.game:has(#theme-atelier:checked) .seat.active .avatar {
+  animation: atelierTurn 1.25s ease-in-out infinite alternate;
+}
+.game:has(#theme-atelier:checked) .card {
+  border-color: #c9b88f;
+  border-radius: 7px;
+  background: #fffaf0;
+  box-shadow: 0 5px 0 #b7aa8d, 0 14px 28px rgba(32, 17, 8, .38), inset 0 1px rgba(255, 255, 255, .94);
+}
+.game:has(#theme-atelier:checked) .trick-winner {
+  border-color: rgba(225, 185, 105, .58);
+  color: #f4d486;
+  background: rgba(20, 18, 14, .92);
+  box-shadow: 0 12px 30px rgba(31, 17, 7, .44);
+}
+
+@media (orientation: landscape) {
+  .game:has(#theme-atelier:checked) {
+    padding: 0;
+  }
+  .game:has(#theme-atelier:checked) .game-header {
+    position: absolute;
+    z-index: 31;
+    left: 0;
+    top: max(7px, env(safe-area-inset-top));
+    width: 100%;
+    max-width: none;
+    min-height: 48px;
+    padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+    grid-template-columns: minmax(90px, 1fr) minmax(260px, 2.3fr) minmax(90px, 1fr);
+    align-items: start;
+    pointer-events: none;
+  }
+  .game:has(#theme-atelier:checked) .game-header button,
+  .game:has(#theme-atelier:checked) .game-header label { pointer-events: auto; }
+  .game:has(#theme-atelier:checked) .room-cluster {
+    padding: 4px 9px;
+    border-left: 0;
+    border-radius: 0 0 12px 0;
+    background: rgba(26, 18, 10, .8);
+    box-shadow: inset 0 1px rgba(255, 240, 201, .1);
+  }
+  .game:has(#theme-atelier:checked) .mini-label { color: #d8aa55; }
+  .game:has(#theme-atelier:checked) .room-code { color: #fff3d7; }
+  .game:has(#theme-atelier:checked) .game-name { display: none; }
+  .game:has(#theme-atelier:checked) .scoreboard {
+    min-width: min(46vw, 620px);
+    padding: 7px 20px 8px;
+    border-color: rgba(225, 185, 105, .52);
+    border-radius: 10px;
+    color: #d7c7a8;
+    background: linear-gradient(180deg, rgba(24, 27, 31, .94), rgba(12, 14, 16, .92));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .4), inset 0 1px rgba(255, 244, 220, .12), 0 0 0 2px rgba(75, 51, 25, .72);
+    backdrop-filter: blur(10px);
+  }
+  .game:has(#theme-atelier:checked) .scoreboard b { color: #fff0cf; }
+  .game:has(#theme-atelier:checked) .scoreboard small { display: none; }
+  .game:has(#theme-atelier:checked) .experience-controls { padding-top: 3px; }
+  .game:has(#theme-atelier:checked) .control-toggle {
+    min-width: 34px;
+    min-height: 34px;
+    grid-template-columns: 1fr;
+    border-color: rgba(225, 185, 105, .4);
+    background: rgba(23, 22, 19, .82);
+  }
+  .game:has(#theme-atelier:checked) .control-label { display: none; }
+  .game:has(#theme-atelier:checked) .game-meta {
+    position: absolute;
+    z-index: 32;
+    left: 0;
+    right: 0;
+    top: 55px;
+    min-height: 26px;
+    pointer-events: none;
+  }
+  .game:has(#theme-atelier:checked) .status-pill,
+  .game:has(#theme-atelier:checked) .turn-timer,
+  .game:has(#theme-atelier:checked) .trump-badge,
+  .game:has(#theme-atelier:checked) .deal-score {
+    border-color: rgba(218, 174, 87, .4);
+    color: #f0d69c;
+    background: rgba(22, 23, 21, .86);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 244, 220, .08);
+  }
+  .game:has(#theme-atelier:checked) .table-wrap {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0 !important;
+    border: 0;
+    border-radius: 0;
+    background: radial-gradient(ellipse at center, rgba(235, 207, 151, .06), transparent 62%), #0c0906;
+    box-shadow: none;
+  }
+  .game:has(#theme-atelier:checked) .table {
+    width: min(100vw, 215.2dvh) !important;
+    max-width: none;
+    height: auto !important;
+    min-height: 0;
+    aspect-ratio: 1840 / 855;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background-image: url("assets/tables/atelier.webp");
+    background-size: 100% 100%;
+    box-shadow: none;
+    filter: drop-shadow(0 28px 44px rgba(0, 0, 0, .46));
+  }
+  .game:has(#theme-atelier:checked) .table:hover { filter: drop-shadow(0 28px 44px rgba(0, 0, 0, .46)); }
+  .game:has(#theme-atelier:checked) .table .seat { min-width: 96px; }
+  .game:has(#theme-atelier:checked) .table .seat .avatar {
+    width: clamp(46px, 6.3vw, 64px) !important;
+    height: clamp(46px, 6.3vw, 64px) !important;
+    margin-bottom: 5px;
+  }
+  .game:has(#theme-atelier:checked) .table .seat-top { left: 50%; top: 14%; transform: translateX(-50%) !important; }
+  .game:has(#theme-atelier:checked) .table .seat-left { left: 5.5%; top: 43%; transform: translateY(-50%) !important; }
+  .game:has(#theme-atelier:checked) .table .seat-right { right: 5.5%; top: 43%; transform: translateY(-50%) !important; }
+  .game:has(#theme-atelier:checked) .table .seat-bottom { left: 50%; bottom: 22%; transform: translateX(-50%) !important; }
+  .game:has(#theme-atelier:checked) .table .seat .seat-nameplate { padding: 4px 8px; }
+  .game:has(#theme-atelier:checked) .table .seat .seat-cards { right: -3px; top: 34px; }
+  .game:has(#theme-atelier:checked) .table .seat .captured-pile { left: -4px; top: 34px; }
+  .game:has(#theme-atelier:checked) .played-card[data-seat="0"] { left: 50%; top: 61%; }
+  .game:has(#theme-atelier:checked) .played-card[data-seat="2"] { left: 50%; top: 40%; }
+  .game:has(#theme-atelier:checked) .played-card[data-seat="1"] { left: 45%; top: 51%; }
+  .game:has(#theme-atelier:checked) .played-card[data-seat="3"] { left: 55%; top: 51%; }
+  .game:has(#theme-atelier:checked) .hand-label { display: none !important; }
+  .game:has(#theme-atelier:checked) .hand {
+    --hand-gap: clamp(2px, .34vw, 5px);
+    position: absolute;
+    z-index: 25;
+    left: 50%;
+    bottom: max(0px, env(safe-area-inset-bottom));
+    width: min(74vw, 980px) !important;
+    max-width: none !important;
+    min-height: clamp(88px, 26dvh, 148px);
+    margin: 0;
+    padding: 8px 10px max(5px, env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 18px 18px 0 0;
+    background: linear-gradient(180deg, rgba(29, 24, 18, .22), rgba(24, 15, 8, .86));
+    box-shadow: 0 -12px 28px rgba(34, 19, 8, .24), inset 0 1px rgba(246, 218, 159, .16);
+    backdrop-filter: blur(3px);
+    transform: translateX(-50%);
+  }
+  .game:has(#theme-atelier:checked) .hand .card {
+    width: clamp(47px, 6.6vw, 70px);
+    flex-basis: clamp(47px, 6.6vw, 70px);
+  }
+  .game:has(#theme-atelier:checked) .hand .card.dealt { animation: none; }
+  .game:has(#theme-atelier:checked) .spectator-bar { position: absolute; z-index: 35; left: 50%; top: 84px; transform: translateX(-50%); }
+
+  /* Keep choice/setup moments as a compact side console. The general mobile
+     sheet is intentionally full-width, but it hides the Atelier table and its
+     profile medallions at short landscape heights. */
+  .game:has(#theme-atelier:checked) .panel {
+    left: auto !important;
+    right: max(10px, env(safe-area-inset-right)) !important;
+    top: 50% !important;
+    bottom: auto !important;
+    width: min(286px, 35vw) !important;
+    max-width: 286px;
+    max-height: calc(100dvh - 18px);
+    padding: 12px 14px;
+    border-radius: 16px;
+    transform: translateY(-50%) !important;
+  }
+  .game:has(#theme-atelier:checked) .panel::before { display: none; }
+  .game:has(#theme-atelier:checked) .trump-panel .panel-intro { margin-block: 4px 7px; }
+  .game:has(#theme-atelier:checked) .trump-panel .suit-buttons { margin-top: 6px; }
+  .game:has(#theme-atelier:checked) .trump-panel .suit-button { min-height: 42px; }
+}
+
+@media (orientation: portrait) {
+  .game:has(#theme-atelier:checked) .table {
+    background-position: center;
+    background-size: cover;
+  }
+  .game:has(#theme-atelier:checked) .table .seat .avatar { width: 48px; height: 48px; }
+  .game:has(#theme-atelier:checked) .table .seat-top {
+    left: 50%;
+    top: 14%;
+    transform: translateX(-50%) !important;
+  }
+  .game:has(#theme-atelier:checked) .table .seat-left {
+    left: 2.5%;
+    top: 57%;
+    transform: translateY(-50%) !important;
+  }
+  .game:has(#theme-atelier:checked) .table .seat-right {
+    right: 2.5%;
+    top: 57%;
+    transform: translateY(-50%) !important;
+  }
+  .game:has(#theme-atelier:checked) .table .seat-bottom {
+    left: 50%;
+    transform: translateX(-50%) !important;
+  }
+  .game:has(#theme-atelier:checked) .table .seat .team,
+  .game:has(#theme-atelier:checked) .table .seat .bot-tag { display: none; }
+  .game:has(#theme-atelier:checked) .table .seat .seat-player-name { max-width: 78px; }
+  .game:has(#theme-atelier:checked) .table .seat .seat-nameplate { padding: 3px 6px; }
+  .game:has(#theme-atelier:checked):has(#trump-panel:not(.hidden)) .seat-bottom,
+  .game:has(#theme-atelier:checked):has(#auction-panel:not(.hidden)) .seat-bottom {
+    bottom: 37%;
+  }
+}
+
+@media (orientation: landscape) and (min-width: 900px) and (min-height: 600px) {
+  .game:has(#theme-atelier:checked) .panel {
+    top: 124px !important;
+    transform: none !important;
+  }
+}
+
+/* Atelier's Ace-overruled moment clones the live Ace and Hukum cards. The
+   real card faces stay dynamic; only their motion and clipping are themed. */
+.atelier-cut-scene {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  perspective: 900px;
+}
+.atelier-cut-card {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  opacity: 0;
+  pointer-events: none !important;
+  transform-origin: center;
+  box-shadow: 0 10px 30px rgba(24, 13, 6, .45) !important;
+}
+.atelier-ace-fragment--left {
+  clip-path: polygon(0 0, 58% 0, 46% 18%, 59% 33%, 45% 49%, 57% 65%, 44% 82%, 53% 100%, 0 100%);
+}
+.atelier-ace-fragment--right {
+  clip-path: polygon(58% 0, 100% 0, 100% 100%, 53% 100%, 44% 82%, 57% 65%, 45% 49%, 59% 33%, 46% 18%);
+}
+.game-effect.is-active .atelier-ace-fragment--left { animation: atelierAceTearLeft 1.35s cubic-bezier(.16, 1, .3, 1) both; }
+.game-effect.is-active .atelier-ace-fragment--right { animation: atelierAceTearRight 1.35s cubic-bezier(.16, 1, .3, 1) both; }
+.game-effect.is-active .atelier-hukum-rise { animation: atelierHukumRise 1.55s cubic-bezier(.16, 1, .3, 1) .18s both; }
+.atelier-cut-line {
+  position: absolute;
+  z-index: 7;
+  left: var(--atelier-ace-x);
+  top: var(--atelier-ace-y);
+  width: 5px;
+  height: 118px;
+  border-radius: 999px;
+  opacity: 0;
+  background: linear-gradient(180deg, transparent, #fff4c8 16% 80%, transparent);
+  box-shadow: 0 0 18px #f3c66d, 0 0 42px rgba(32, 105, 88, .7);
+  transform: translate(-50%, -50%) rotate(13deg) scaleY(.2);
+}
+.game-effect.is-active .atelier-cut-line { animation: atelierCutLine .62s ease-out .18s both; }
+.game-effect--theme-atelier .game-effect__callout {
+  z-index: 9;
+  min-width: 190px;
+  padding: 10px 16px;
+  border: 1px solid rgba(239, 203, 132, .68);
+  border-radius: 10px;
+  color: #fff0cb;
+  background: linear-gradient(145deg, rgba(31, 27, 21, .96), rgba(12, 14, 13, .95));
+  box-shadow: 0 18px 48px rgba(19, 10, 4, .52), inset 0 1px rgba(255, 246, 217, .13);
+}
+.game-effect--theme-atelier.game-effect--trump-cut .game-effect__callout {
+  top: -94px;
+  border-color: rgba(239, 203, 132, .78);
+  transform: none;
+}
+.game-effect--theme-atelier .game-effect__eyebrow { color: #95b76a; }
+.game-effect--theme-atelier .game-effect__symbol { color: #d8aa55; font-size: 8px; font-weight: 900; letter-spacing: .18em; }
+.game-effect--theme-atelier .game-effect__title { color: #e9c475; font-family: "Fraunces", serif; letter-spacing: -.02em; }
+.game-effect--theme-atelier .game-effect__subtitle { color: #cfc0a2; }
+
+@keyframes atelierTurn {
+  from { box-shadow: 0 0 0 4px #3a2b18, 0 8px 18px rgba(0, 0, 0, .5), 0 0 0 rgba(216, 170, 85, 0); transform: translateY(0); }
+  to { box-shadow: 0 0 0 4px #3a2b18, 0 9px 22px rgba(0, 0, 0, .52), 0 0 26px rgba(216, 170, 85, .78); transform: translateY(-2px); }
+}
+@keyframes atelierAceTearLeft {
+  0% { opacity: 0; transform: translate(calc(var(--atelier-ace-x) - 50%), calc(var(--atelier-ace-y) - 50%)) scale(.86); }
+  18%, 36% { opacity: 1; transform: translate(calc(var(--atelier-ace-x) - 50%), calc(var(--atelier-ace-y) - 50%)) scale(1.08); }
+  76% { opacity: 1; transform: translate(calc(var(--atelier-ace-x) - 50% - 118px), calc(var(--atelier-ace-y) - 50% + 34px)) rotate(-34deg) scale(.82); }
+  100% { opacity: 0; transform: translate(calc(var(--atelier-ace-x) - 50% - 164px), calc(var(--atelier-ace-y) - 50% + 62px)) rotate(-48deg) scale(.64); }
+}
+@keyframes atelierAceTearRight {
+  0% { opacity: 0; transform: translate(calc(var(--atelier-ace-x) - 50%), calc(var(--atelier-ace-y) - 50%)) scale(.86); }
+  18%, 36% { opacity: 1; transform: translate(calc(var(--atelier-ace-x) - 50%), calc(var(--atelier-ace-y) - 50%)) scale(1.08); }
+  76% { opacity: 1; transform: translate(calc(var(--atelier-ace-x) - 50% + 118px), calc(var(--atelier-ace-y) - 50% - 28px)) rotate(34deg) scale(.82); }
+  100% { opacity: 0; transform: translate(calc(var(--atelier-ace-x) - 50% + 164px), calc(var(--atelier-ace-y) - 50% - 52px)) rotate(48deg) scale(.64); }
+}
+@keyframes atelierHukumRise {
+  0% { opacity: 0; transform: translate(calc(var(--atelier-hukum-x) - 50%), calc(var(--atelier-hukum-y) - 50% + 90px)) rotateY(64deg) rotate(12deg) scale(.3); filter: brightness(.8); }
+  34% { opacity: 1; transform: translate(calc(var(--atelier-hukum-x) - 50%), calc(var(--atelier-hukum-y) - 50% - 28px)) rotateY(0) rotate(-4deg) scale(1.16); filter: brightness(1.28); }
+  68% { opacity: 1; transform: translate(calc(var(--atelier-hukum-x) - 50%), calc(var(--atelier-hukum-y) - 50% - 16px)) rotate(0) scale(1.04); filter: brightness(1.08); }
+  100% { opacity: 0; transform: translate(calc(var(--atelier-hukum-x) - 50%), calc(var(--atelier-hukum-y) - 50% - 44px)) scale(.92); filter: brightness(1); }
+}
+@keyframes atelierCutLine {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(13deg) scaleY(.2); }
+  32% { opacity: 1; transform: translate(-50%, -50%) rotate(13deg) scaleY(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(13deg) scaleY(1.28); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atelier-cut-scene { display: none !important; }
+  .game:has(#theme-atelier:checked) .seat.active .avatar { animation: none; }
+}

@@ -321,7 +321,7 @@ test("room themes and auction mode are validated and exposed", () => {
   updateRoomSettings(room, 0, { tableTheme: "neon", auctionMode: true });
   assert.equal(room.tableTheme, "neon");
   assert.equal(room.settings.auctionMode, true);
-  assert.deepEqual(TABLE_THEMES, ["noir", "comic", "neon", "adda", "gully"]);
+  assert.deepEqual(TABLE_THEMES, ["noir", "comic", "neon", "adda", "gully", "atelier"]);
   assert.throws(() => updateRoomSettings(room, 0, { tableTheme: "casino" }), /valid table theme/);
 
   room.players = [0, 1, 2, 3].map((seat) => ({ name: `P${seat}`, token: `t${seat}`, socketId: `s${seat}` }));

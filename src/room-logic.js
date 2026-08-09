@@ -31,7 +31,7 @@ import {
   botRummyDiscard
 } from "./rummy.js";
 
-export const TABLE_THEMES = ["noir", "comic", "neon", "adda", "gully"];
+export const TABLE_THEMES = ["noir", "comic", "neon", "adda", "gully", "atelier"];
 export const GAME_TYPES = ["court-piece", "judgment", "rummy"];
 export const DEFAULT_GAME_TYPE = "court-piece";
 export const DEFAULT_TABLE_THEME = "noir";

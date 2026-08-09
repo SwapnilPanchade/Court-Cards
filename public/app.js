@@ -116,7 +116,7 @@ let firstFiveScrollKey = "";
 let lastManualHandScrollAt = 0;
 let programmaticHandScrollUntil = 0;
 let storedSession = JSON.parse(localStorage.getItem("courtPieceSession") || "null");
-const tableThemes = ["noir", "comic", "neon", "adda", "gully"];
+const tableThemes = ["noir", "comic", "neon", "adda", "gully", "atelier"];
 const gameTypes = ["court-piece", "judgment", "rummy"];
 const gameMeta = {
   "court-piece": { label: "Court Piece", eyebrow: "COURT PIECE", scoreA: "Team A", scoreB: "Team B" },
@@ -147,6 +147,14 @@ const effectStreaks = {
 function normalizeTableTheme(value) {
   const theme = String(value || "").trim().toLowerCase();
   return tableThemes.includes(theme) ? theme : "noir";
+}
+
+function isAtelierTheme() {
+  return normalizeTableTheme(state?.tableTheme || createTableTheme) === "atelier";
+}
+
+function reducedMotionEnabled() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
 }
 
 function normalizeGameType(value) {
@@ -196,7 +204,7 @@ function initialsFor(name) {
 
 function avatarMarkup(player) {
   const avatarId = normalizeAvatarId(player?.avatarId);
-  return `<div class="avatar ${player?.bot ? "bot-avatar" : ""}" data-avatar="${avatarId}" style="--avatar-image:url('assets/avatars/${avatarId}.webp')" aria-label="${player.name}'s avatar"><span class="avatar-fallback" aria-hidden="true">${initialsFor(player.name)}</span></div>`;
+  return `<div class="avatar ${player?.bot ? "bot-avatar" : ""}" data-avatar="${avatarId}" data-profile-replacement="true" style="--avatar-image:url('assets/avatars/${avatarId}.webp')" aria-label="${player.name}'s selected profile"><span class="avatar-fallback" aria-hidden="true">${initialsFor(player.name)}</span></div>`;
 }
 
 function applyTableTheme(value) {
@@ -658,6 +666,58 @@ function renderSeats() {
   }
 }
 
+function animateAtelierDeal(hand) {
+  if (!isAtelierTheme() || reducedMotionEnabled() || !window.gsap) return;
+  const cards = [...hand.querySelectorAll(".card.dealt")];
+  if (!cards.length) return;
+
+  requestAnimationFrame(() => {
+    const table = $(".table");
+    const tableRect = table?.getBoundingClientRect();
+    if (!tableRect?.width) return;
+    const originX = tableRect.left + tableRect.width * 0.5;
+    const originY = tableRect.top + tableRect.height * 0.51;
+    cards.forEach((card, index) => {
+      const rect = card.getBoundingClientRect();
+      const x = originX - (rect.left + rect.width / 2);
+      const y = originY - (rect.top + rect.height / 2);
+      try {
+        gsap.fromTo(card,
+          { x, y, scale: 0.16, rotation: (index - cards.length / 2) * 5, rotationY: 50, autoAlpha: 0 },
+          { x: 0, y: 0, scale: 1, rotation: 0, rotationY: 0, autoAlpha: 1, duration: 0.64, delay: index * 0.055, ease: "back.out(1.45)", clearProps: "x,y,rotation,rotationY,opacity,visibility" }
+        );
+      } catch (_) { /* CSS deal animation remains available. */ }
+    });
+  });
+}
+
+function animateAtelierTrickCapture(winnerSeat) {
+  if (!isAtelierTheme() || reducedMotionEnabled() || !window.gsap || winnerSeat === null || winnerSeat === undefined) return;
+  const target = $("#seat-" + relativeSeat(winnerSeat) + " .avatar");
+  const cards = [...document.querySelectorAll(".trick .played-card")];
+  const targetRect = target?.getBoundingClientRect();
+  if (!targetRect?.width || !cards.length) return;
+
+  const targetX = targetRect.left + targetRect.width / 2;
+  const targetY = targetRect.top + targetRect.height / 2;
+  try {
+    const timeline = gsap.timeline({ delay: 0.38 });
+    cards.forEach((card, index) => {
+      const rect = card.getBoundingClientRect();
+      timeline.to(card, {
+        x: targetX - (rect.left + rect.width / 2),
+        y: targetY - (rect.top + rect.height / 2),
+        scale: 0.2,
+        rotation: (index - cards.length / 2) * 16,
+        autoAlpha: 0,
+        duration: 0.52,
+        ease: "power3.in"
+      }, index * 0.035);
+    });
+    timeline.fromTo(target, { scale: 1 }, { scale: 1.14, duration: 0.18, yoyo: true, repeat: 1, ease: "power2.out" }, 0.46);
+  } catch (_) { /* The resolved trick remains readable without motion. */ }
+}
+
 function renderHand() {
   const hand = $("#hand");
   const round = state.round;
@@ -707,6 +767,7 @@ function renderHand() {
     if (card.classList.contains("dealt")) card.style.animationDelay = `${index * 45}ms`;
   });
   autoPositionHand(hand, round, sorted, firstFive, leadSuit, hasLead);
+  animateAtelierDeal(hand);
   previousHandIds = new Set(sorted.map((card) => card.id));
   hand.querySelectorAll("[data-card]").forEach((card) => card.addEventListener("click", () => {
     card.blur();
@@ -1237,10 +1298,22 @@ function runGameEffects() {
     const card = document.querySelector(`.played-card[data-card="${newlyPlayed.card.id}"]`);
     if (card && window.gsap) {
       try {
-        gsap.fromTo(card,
-          { scale: 0.42, rotation: newlyPlayed.seat % 2 ? -18 : 18, filter: "brightness(1.75)" },
-          { scale: 1, rotation: 0, filter: "brightness(1)", duration: 0.46, ease: "back.out(2)" }
-        );
+        if (isAtelierTheme() && !reducedMotionEnabled()) {
+          const source = $("#seat-" + relativeSeat(newlyPlayed.seat) + " .avatar");
+          const sourceRect = source?.getBoundingClientRect();
+          const cardRect = card.getBoundingClientRect();
+          const x = sourceRect ? sourceRect.left + sourceRect.width / 2 - (cardRect.left + cardRect.width / 2) : 0;
+          const y = sourceRect ? sourceRect.top + sourceRect.height / 2 - (cardRect.top + cardRect.height / 2) : 0;
+          gsap.fromTo(card,
+            { x, y, scale: 0.58, rotation: newlyPlayed.seat % 2 ? -22 : 22, rotationY: 58, filter: "brightness(1.35) saturate(1.2)" },
+            { x: 0, y: 0, scale: 1, rotation: 0, rotationY: 0, filter: "brightness(1) saturate(1)", duration: 0.62, ease: "power3.out", clearProps: "x,y,rotation,rotationY,filter" }
+          );
+        } else {
+          gsap.fromTo(card,
+            { scale: 0.42, rotation: newlyPlayed.seat % 2 ? -18 : 18, filter: "brightness(1.75)" },
+            { scale: 1, rotation: 0, filter: "brightness(1)", duration: 0.46, ease: "back.out(2)" }
+          );
+        }
       } catch (_) { /* Card play remains functional without motion. */ }
     }
 
@@ -1255,13 +1328,20 @@ function runGameEffects() {
       && newlyPlayed.card.suit === trump
       && winningPlay?.card.id === newlyPlayed.card.id;
     if (isTrumpCut) {
-      const aceCut = previousTrick.some((play) => play.card.rank === "A"
+      const cutAcePlay = previousTrick.find((play) => play.card.rank === "A"
         && play.card.suit === leadSuit
         && state.players[play.seat]?.team !== team);
+      const aceCut = Boolean(cutAcePlay);
+      const aceElement = cutAcePlay
+        ? document.querySelector(`.played-card[data-card="${cutAcePlay.card.id}"]`)
+        : null;
       const streak = effectStreaks.trick.team === team ? Math.max(1, effectStreaks.trick.count) : 1;
-      effects?.onTrumpCut?.({ aceCut, element: card, team, isLocal: isLocalTeam(team), streak });
+      effects?.onTrumpCut?.({ aceCut, aceElement, element: card, team, isLocal: isLocalTeam(team), streak });
     }
   }
+
+  const trickJustResolved = state.round.phase === "trick_complete" && previousState.round.phase !== "trick_complete";
+  if (trickJustResolved) animateAtelierTrickCapture(state.round.pendingWinner);
 
   const winnerSeat = state.round.collectedBySeat?.findIndex((count, seat) => count > (previousState.round.collectedBySeat?.[seat] || 0)) ?? -1;
   const roundJustFinished = previousState.round.phase !== "round_over" && state.round.phase === "round_over";
