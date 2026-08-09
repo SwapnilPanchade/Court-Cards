@@ -18,6 +18,9 @@ import {
   joinAsPlayer,
   leavePlayerSeat,
   makeBot,
+  humanIdleDeadline,
+  isHumanIdle,
+  markHumanActivity,
   normalizeAvatarId,
   passBid,
   passTrump,
@@ -119,6 +122,7 @@ export class RoomDurableObject {
         auctionMode: body.auctionMode
       });
       await this.saveRoom();
+      await this.scheduleAfterStateChange();
       return Response.json({
         ok: true,
         code,
@@ -154,6 +158,7 @@ export class RoomDurableObject {
     const { id, event, payload = {} } = data || {};
     try {
       const result = await this.dispatch(ws, event, payload);
+      await this.recordHumanActivity(ws);
       if (id !== undefined) ws.send(JSON.stringify({ id, ok: true, ...result }));
     } catch (error) {
       const body = { id, ok: false, error: error.message || "Something went wrong." };
@@ -169,6 +174,20 @@ export class RoomDurableObject {
 
   async webSocketError(ws) {
     await this.detachSocket(ws, false);
+  }
+
+  async recordHumanActivity(ws) {
+    const room = await this.loadRoom();
+    if (!room || room.destroyed) return;
+    const session = this.sessionOf(ws);
+    const player = Number.isInteger(session.seat) ? room.players[session.seat] : null;
+    const humanPlayer = session.role === "player" && player && !player.bot && player.token === session.token;
+    const humanSpectator = session.role === "spectator"
+      && room.spectators.some((spectator) => spectator.token === session.spectatorToken);
+    if (!humanPlayer && !humanSpectator) return;
+    markHumanActivity(room);
+    await this.saveRoom();
+    if (!room.alarm || room.alarm.kind === "idle") await this.scheduleAfterStateChange();
   }
 
   async detachSocket(ws, removePlayer) {
@@ -187,7 +206,7 @@ export class RoomDurableObject {
           if (result.destroyed) {
             room.destroyed = true;
             await this.saveRoom();
-            this.broadcastDestroyed();
+            this.broadcastDestroyed("no_humans");
             return;
           }
         } else {
@@ -363,7 +382,7 @@ export class RoomDurableObject {
       if (result.destroyed) {
         room.destroyed = true;
         await this.saveRoom();
-        this.broadcastDestroyed();
+        this.broadcastDestroyed("no_humans");
         return { destroyed: true };
       }
       await this.saveRoom();
@@ -677,10 +696,10 @@ export class RoomDurableObject {
     }
   }
 
-  broadcastDestroyed() {
+  broadcastDestroyed(reason = "no_humans") {
     for (const ws of this.ctx.getWebSockets()) {
       try {
-        ws.send(JSON.stringify({ event: "room_destroyed", payload: { reason: "no_humans" } }));
+        ws.send(JSON.stringify({ event: "room_destroyed", payload: { reason } }));
         ws.close(1000, "Room closed");
       } catch {
         // ignore
@@ -693,10 +712,25 @@ export class RoomDurableObject {
     if (room.round) room.round.turnDeadline = null;
   }
 
+  async scheduleIdleAlarm(room = this.room) {
+    if (!room || room.destroyed) return;
+    room.alarm = { kind: "idle" };
+    if (room.round) room.round.turnDeadline = null;
+    await this.ctx.storage.put(ROOM_KEY, room);
+    await this.ctx.storage.setAlarm(humanIdleDeadline(room));
+  }
+
+  async destroyIdleRoom(room) {
+    room.destroyed = true;
+    await this.saveRoom();
+    this.broadcastDestroyed("human_inactivity");
+  }
+
   async scheduleAfterStateChange() {
     const room = this.room;
-    if (!room?.round) {
-      await this.ctx.storage.deleteAlarm();
+    if (!room || room.destroyed) return;
+    if (!room.round) {
+      await this.scheduleIdleAlarm(room);
       return;
     }
     const round = room.round;
@@ -732,15 +766,29 @@ export class RoomDurableObject {
     }
 
     this.clearAlarmState(room);
-    await this.ctx.storage.put(ROOM_KEY, room);
-    await this.ctx.storage.deleteAlarm();
+    await this.scheduleIdleAlarm(room);
   }
 
   async alarm() {
     const room = await this.loadRoom();
-    if (!room?.round || !room.alarm) return;
-    const round = room.round;
+    if (!room || !room.alarm) return;
     const alarm = room.alarm;
+
+    if (isHumanIdle(room)) {
+      await this.destroyIdleRoom(room);
+      return;
+    }
+
+    if (alarm.kind === "idle") {
+      await this.scheduleIdleAlarm(room);
+      return;
+    }
+
+    if (!room.round) {
+      await this.scheduleIdleAlarm(room);
+      return;
+    }
+    const round = room.round;
 
     if (alarm.kind === "collect") {
       if (round.phase !== "trick_complete") return;

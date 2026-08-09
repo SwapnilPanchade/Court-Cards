@@ -1799,3 +1799,189 @@ body::before {
   .ambient-orbit, .ambient-cross { animation: none !important; }
   .table, .join-card, .panel { transform: none !important; }
 }
+
+/* 2026 command deck: gameplay information stays readable and every action
+   surface remains inside the viewport. Motion is visual only; layout belongs
+   entirely to CSS. */
+.hand:empty { display: none; }
+
+.deal-score {
+  min-height: 30px;
+  gap: 8px;
+  padding: 4px 10px;
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  color: var(--ink);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface));
+  box-shadow: inset 0 1px rgba(255,255,255,.07), 0 8px 20px rgba(0,0,0,.2);
+  letter-spacing: 0;
+}
+.deal-score > i { width: 1px; height: 15px; background: var(--line); }
+.deal-score b { color: var(--accent); font-size: 13px; font-variant-numeric: tabular-nums; }
+.deal-kicker { color: var(--muted); font-size: 7px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.deal-team { font-size: 8px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.deal-team-a { color: var(--team-a); }
+.deal-team-b { color: var(--team-b); }
+
+.contract-chip {
+  max-width: 190px;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bid-history-item { min-width: 132px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bid-history-player { min-width: 0; display: grid; gap: 2px; }
+.bid-history-player strong { max-width: 78px; overflow: hidden; color: var(--ink); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.bid-history-player small { color: var(--muted); font-size: 6px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.bid-history-action { color: var(--accent); font-size: 10px; white-space: nowrap; }
+.bid-history-item.is-pass { opacity: .58; }
+.bid-history-item.is-pass .bid-history-action { color: var(--muted); }
+
+@media (max-width: 899px) {
+  .game {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding-inline: max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-right));
+  }
+  .game-header {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(54px, .7fr) minmax(150px, 1.4fr) minmax(54px, .7fr);
+    align-items: center;
+    gap: 5px;
+    padding-inline: 0;
+  }
+  .room-cluster { min-width: 0; padding-inline: 5px; overflow: hidden; }
+  .room-code { max-width: 72px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; }
+  .room-tools { gap: 7px; }
+  .room-tools .text-button { font-size: 6px; }
+  .header-center {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100%;
+    min-width: 0;
+    transform: none !important;
+  }
+  .game-name { margin-bottom: 3px; font-size: 7px; letter-spacing: .18em; }
+  .scoreboard { width: 100%; min-width: 0; grid-template-columns: minmax(0,1fr) 1px minmax(0,1fr); gap: 5px; padding: 5px 7px 7px; }
+  .scoreboard span { min-width: 0; overflow: hidden; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+  .scoreboard b { margin-left: 2px; font-size: 13px; }
+  .scoreboard small { display: none; }
+  .experience-controls { min-width: 0; justify-content: end; gap: 4px; }
+  .control-toggle { min-width: 29px; min-height: 29px; grid-template-columns: 1fr; padding: 3px; }
+  .control-label { display: none; }
+  .game-meta { width: 100%; min-width: 0; justify-content: center; gap: 5px; overflow: hidden; }
+  .status-pill { min-width: 0; max-width: 44vw; overflow: hidden; padding-inline: 8px; text-overflow: ellipsis; white-space: nowrap; }
+  .deal-score { flex: none; }
+  .table-wrap { width: 100%; min-width: 0; padding-right: 0 !important; }
+  .game:has(#lobby-panel:not(.hidden)) .table,
+  .game:has(#trump-panel:not(.hidden)) .table,
+  .game:has(#auction-panel:not(.hidden)) .table,
+  .game:has(#judgment-panel:not(.hidden)) .table,
+  .game:has(#rummy-panel:not(.hidden)) .table { width: min(96vw, 920px); }
+
+  .panel {
+    left: max(10px, env(safe-area-inset-left)) !important;
+    right: max(10px, env(safe-area-inset-right)) !important;
+    top: auto !important;
+    bottom: calc(158px + env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: none;
+    max-height: min(46dvh, 380px);
+    padding: 14px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-radius: 22px 22px 18px 18px;
+    transform: none !important;
+    transform-style: flat;
+  }
+  .game:has(#hand:empty) .panel,
+  .game:has(#lobby-panel:not(.hidden)) .panel,
+  .game:has(#round-panel:not(.hidden)) .panel {
+    bottom: max(10px, env(safe-area-inset-bottom)) !important;
+  }
+  .panel::before {
+    display: block;
+    width: 38px;
+    height: 4px;
+    margin: -5px auto 9px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.2);
+    content: "";
+  }
+  .panel-heading { align-items: center; }
+  .panel h2 { font-size: clamp(17px, 5vw, 22px); }
+  .panel-intro { margin: 5px 0 9px; font-size: 9px !important; }
+  .lobby-panel { max-height: calc(100dvh - 78px); }
+  .lobby-panel .panel-scroll { max-height: calc(100dvh - 250px); overflow-y: auto; }
+  .rummy-panel,
+  .judgment-panel,
+  .trump-panel { max-height: min(34dvh, 230px); }
+  .rummy-actions { grid-template-columns: 1fr 1fr; }
+  .rummy-actions button { min-height: 48px; }
+  .auction-panel { max-height: min(51dvh, 410px); }
+  .auction-panel .bid-history { min-height: 0; max-height: 92px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0 9px; overflow: auto; }
+  .auction-panel .bid-history li { min-width: 0; padding: 6px 8px; }
+  .bid-control { grid-template-columns: 42px 1fr 42px; }
+  .bid-control input, .bid-step { min-height: 42px; }
+  .bid-actions button { min-height: 42px; }
+  .hand { width: 100% !important; max-width: 100% !important; border-radius: 18px 18px 0 0; }
+}
+
+@media (max-width: 480px) and (orientation: portrait) {
+  .game-header { grid-template-columns: 54px minmax(170px, 1fr) 64px; }
+  .game-name { display: none; }
+  .status-pill { max-width: 35vw; font-size: 8px; }
+  .deal-score { gap: 5px; padding-inline: 7px; }
+  .deal-team { font-size: 7px; }
+  .deal-kicker { display: none; }
+  .panel { bottom: calc(158px + env(safe-area-inset-bottom)) !important; }
+  .game:has(#hand:empty) .panel,
+  .game:has(#lobby-panel:not(.hidden)) .panel,
+  .game:has(#round-panel:not(.hidden)) .panel { bottom: max(9px, env(safe-area-inset-bottom)) !important; }
+}
+
+@media (max-width: 899px) and (orientation: landscape) and (max-height: 560px) {
+  .game-header { min-height: 34px; }
+  .game-name { display: none; }
+  .game-meta { min-height: 24px; }
+  .panel {
+    top: 104px !important;
+    bottom: calc(108px + env(safe-area-inset-bottom)) !important;
+    max-height: none;
+    padding: 10px 12px;
+    border-radius: 17px;
+  }
+  .game:has(#hand:empty) .panel,
+  .game:has(#lobby-panel:not(.hidden)) .panel,
+  .game:has(#round-panel:not(.hidden)) .panel { top: 64px !important; bottom: max(7px, env(safe-area-inset-bottom)) !important; }
+  .panel::before { margin-bottom: 5px; }
+  .panel h2 { font-size: 16px; }
+  .auction-panel .bid-history { max-height: 45px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bid-history-player small { display: none; }
+  .auction-panel .panel-intro { white-space: nowrap; }
+  .auction-panel {
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(300px, 1.05fr);
+    grid-template-rows: auto auto 1fr;
+    column-gap: 12px;
+    overflow: hidden;
+  }
+  .auction-panel.hidden { display: none; }
+  .auction-panel::before { position: absolute; left: calc(50% - 19px); top: 6px; margin: 0; }
+  .auction-panel .panel-heading { grid-column: 1; grid-row: 1; }
+  .auction-panel > .panel-intro { grid-column: 1; grid-row: 2; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; }
+  .auction-panel .bid-history { grid-column: 1; grid-row: 3; grid-template-columns: 1fr 1fr; align-self: start; margin: 0; }
+  .auction-panel #auction-bid-controls,
+  .auction-panel #auction-decision { grid-column: 2; grid-row: 1 / 4; align-self: center; }
+  .auction-panel .auction-decision { padding: 8px 10px; }
+  .auction-panel #auction-decision-copy { display: -webkit-box; margin-top: 3px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .auction-panel .auction-decision-actions { margin-top: 5px; }
+  .auction-panel .auction-decision-actions button { min-height: 32px; }
+  .rummy-panel, .judgment-panel, .trump-panel { max-height: calc(100dvh - 148px); }
+  .hand { min-height: 82px; padding-top: 3px; }
+}

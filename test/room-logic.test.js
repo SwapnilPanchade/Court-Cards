@@ -11,8 +11,12 @@ import {
   createRound,
   defaultAvatarForSeat,
   hasHumans,
+  HUMAN_IDLE_TIMEOUT_MS,
+  humanIdleDeadline,
+  isHumanIdle,
   joinAsPlayer,
   leavePlayerSeat,
+  markHumanActivity,
   makeBot,
   publicRoomInfo,
   recordRoundResult,
@@ -26,6 +30,17 @@ import {
 function human(name, token = "t") {
   return { name, token, socketId: "s", avatarId: "jugaadu", bot: false };
 }
+
+test("human activity extends the room lifetime while bot activity cannot", () => {
+  const room = createEmptyRoom("ABC12", human("Host", "host"));
+  markHumanActivity(room, 1_000);
+  assert.equal(humanIdleDeadline(room), 1_000 + HUMAN_IDLE_TIMEOUT_MS);
+  assert.equal(isHumanIdle(room, 1_000 + HUMAN_IDLE_TIMEOUT_MS - 1), false);
+  assert.equal(isHumanIdle(room, 1_000 + HUMAN_IDLE_TIMEOUT_MS), true);
+
+  room.players[1] = makeBot(1, () => "bot-1");
+  assert.equal(room.lastHumanActivityAt, 1_000);
+});
 
 test("leave in lobby frees the seat so another player can join", () => {
   const room = createEmptyRoom("ABC12", human("Host", "host"));

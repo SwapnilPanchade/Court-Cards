@@ -38,7 +38,9 @@
     };
 
     const wireSurface = (root = document) => {
-      root.querySelectorAll?.(".join-card, .panel, .home-table-preview").forEach(addTilt);
+      // Fixed game panels use CSS transforms for viewport anchoring. Animating
+      // their transform would replace that anchor and push them off-screen.
+      root.querySelectorAll?.(".join-card, .home-table-preview").forEach(addTilt);
       root.querySelectorAll?.(".game-mode-card, .primary, .secondary, .control-toggle, .theme-choice, .avatar-choice").forEach((element) => {
         if (element.dataset.motionHover) return;
         element.dataset.motionHover = "true";
@@ -72,7 +74,7 @@
       revealLiveSurface();
       document.querySelectorAll(".panel:not(.hidden):not([data-motion-revealed])").forEach((panel) => {
         panel.dataset.motionRevealed = "true";
-        animate(panel, { opacity: [0, 1], y: [18, 0], scale: [0.98, 1] }, softSpring);
+        animate(panel, { opacity: [0, 1], filter: ["blur(10px)", "blur(0px)"] }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] });
       });
     });
     observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });

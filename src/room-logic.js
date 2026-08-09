@@ -101,6 +101,21 @@ export function hasHumans(room) {
   return humanSeats(room).length > 0;
 }
 
+export const HUMAN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+export function markHumanActivity(room, now = Date.now()) {
+  room.lastHumanActivityAt = now;
+  return room.lastHumanActivityAt;
+}
+
+export function humanIdleDeadline(room) {
+  return Number(room.lastHumanActivityAt || room.updatedAt || Date.now()) + HUMAN_IDLE_TIMEOUT_MS;
+}
+
+export function isHumanIdle(room, now = Date.now()) {
+  return now >= humanIdleDeadline(room);
+}
+
 export function botSeats(room) {
   return room.players
     .map((player, seat) => (player?.bot ? seat : -1))
@@ -173,6 +188,7 @@ export function createEmptyRoom(code, hostPlayer, options = {}) {
     },
     settingsLocked: false,
     destroyed: false,
+    lastHumanActivityAt: Date.now(),
     updatedAt: Date.now()
   };
   updateRoomSettings(room, 0, {

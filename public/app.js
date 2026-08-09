@@ -864,13 +864,16 @@ function renderBiddingPanel() {
   const deciding = round.phase === "auction_decision";
   const turnName = bid.turn === null ? "Auction complete" : state.players[bid.turn]?.name || "Player";
   const bidderName = bid.highestBidder === null ? "No bidder yet" : state.players[bid.highestBidder]?.name || "Player";
+  const bidderTeam = bid.highestBidder === null ? null : state.players[bid.highestBidder]?.team;
   const decisionName = bid.decisionSeat === null ? "Original caller" : state.players[bid.decisionSeat]?.name || "Original caller";
   const highest = bid.highestBid === null ? `Opening bid ${bid.minimumBid}` : `High bid ${bid.highestBid} · ${bidderName}`;
   const yourTurn = Boolean(bid.canBid || bid.canPass);
   const contractBid = bid.contractBid ?? bid.highestBid;
   const contractLabel = Number.isFinite(Number(contractBid)) ? String(contractBid) : "the high bid";
   if (title) title.textContent = deciding ? "Who keeps the hukum?" : "Bid for the contract";
-  if (contract) contract.textContent = contractBid === null ? "Open" : `${contractBid} tricks`;
+  if (contract) contract.textContent = contractBid === null
+    ? "Bidding open"
+    : `Team ${bidderTeam ? "B" : "A"} · ${bidderName} · ${contractBid}`;
   if (status) {
     status.textContent = deciding
       ? bid.canDecide
@@ -886,17 +889,32 @@ function renderBiddingPanel() {
       history.appendChild(Object.assign(document.createElement("li"), { className: "bid-history-empty", textContent: "No bids yet" }));
     } else {
       entries.forEach((entry) => {
-        const player = state.players[entry.seat]?.name || `Seat ${entry.seat + 1}`;
-        const text = entry.action === "pass"
-          ? `${player} passed`
+        const playerState = state.players[entry.seat];
+        const player = playerState?.name || `Seat ${entry.seat + 1}`;
+        const team = playerState?.team ? "B" : "A";
+        const action = entry.action === "pass"
+          ? "Passed"
           : entry.action === "forced_bid"
-            ? `${player} opened at ${entry.bid}`
+            ? `Opened ${entry.bid}`
             : entry.action === "keep"
-              ? `${player} kept hukum at ${entry.bid}`
+              ? `Kept ${entry.bid}`
               : entry.action === "give"
-                ? `${player} gave the contract`
-                : `${player} bid ${entry.bid}`;
-        history.appendChild(Object.assign(document.createElement("li"), { textContent: text }));
+                ? "Gave contract"
+                : `Bid ${entry.bid}`;
+        const item = document.createElement("li");
+        item.className = `bid-history-item ${entry.action === "pass" ? "is-pass" : "is-bid"}`;
+        const identity = document.createElement("span");
+        identity.className = "bid-history-player";
+        const name = document.createElement("strong");
+        name.textContent = player;
+        const teamLabel = document.createElement("small");
+        teamLabel.textContent = `Team ${team}`;
+        identity.append(name, teamLabel);
+        const actionLabel = document.createElement("b");
+        actionLabel.className = "bid-history-action";
+        actionLabel.textContent = action;
+        item.append(identity, actionLabel);
+        history.appendChild(item);
       });
     }
   }
@@ -1295,13 +1313,13 @@ function render() {
   trump.textContent = state.round?.trump ? `Hukum ${symbols[state.round.trump]}` : "";
   trump.classList.toggle("red", ["hearts", "diamonds"].includes(state.round?.trump));
   const dealScore = $("#deal-score");
-  dealScore.classList.toggle("hidden", !state.round || ["choosing_trump", "bidding", "auction_decision"].includes(state.round.phase));
+  dealScore.classList.toggle("hidden", !state.round);
   if (state.round) {
-    dealScore.textContent = state.gameType === "court-piece"
-      ? `HANDS  A ${state.round.tricks[0]}  ·  ${state.round.tricks[1]} B`
+    dealScore.innerHTML = state.gameType === "court-piece"
+      ? `<span class="deal-kicker">Hands</span><span class="deal-team deal-team-a">Team A <b>${state.round.tricks[0]}</b></span><i></i><span class="deal-team deal-team-b"><b>${state.round.tricks[1]}</b> Team B</span>`
       : state.gameType === "judgment"
-        ? `CALLS  ${state.round.calls?.join(" · ") || "—"}`
-        : `STOCK  ${state.round.stockCount ?? "—"}  ·  DISCARD  ${state.round.discardTop?.rank || "—"}`;
+        ? `<span class="deal-kicker">Calls</span><strong>${state.round.calls?.join(" · ") || "—"}</strong>`
+        : `<span class="deal-kicker">Rummy</span><span>Stock <b>${state.round.stockCount ?? "—"}</b></span><i></i><span>Discard <b>${state.round.discardTop?.rank || "—"}</b></span>`;
     dealScore.removeAttribute("title");
   }
   $("#center-deck").classList.toggle("hidden", !state.round);
@@ -1327,8 +1345,8 @@ socket.on("room_state", (nextState) => {
   render();
   requestAnimationFrame(() => window.scrollTo(0, 0));
 });
-socket.on("room_destroyed", () => {
-  toast("Room closed — no human players left");
+socket.on("room_destroyed", (payload = {}) => {
+  toast(payload.reason === "human_inactivity" ? "Room closed after 5 minutes of inactivity" : "Room closed — no human players left");
   socket.close();
   localStorage.removeItem("courtPieceSession");
   storedSession = null;
