@@ -142,6 +142,8 @@ let pendingBidKey = "";
 let roomAvailabilityTimer = null;
 let roomAvailabilityRequest = 0;
 let hukumStoryTimer = null;
+let settlementState = null;
+let ledgerFilter = "";
 const effectStreaks = {
   trick: { team: null, count: 0 },
   round: { team: null, count: 0 }
@@ -544,6 +546,122 @@ function closeFxLab() {
   setOverlayOpen($("#fx-lab"), $("#fx-lab-toggle"), false);
 }
 
+function closeSettlementLedger() {
+  setOverlayOpen($("#settlement-ledger"), $("#ledger-toggle"), false);
+}
+
+function formatRupees(amountPaise, signed = false) {
+  const amount = Number(amountPaise || 0) / 100;
+  const sign = amount < 0 ? "−" : signed && amount > 0 ? "+" : "";
+  const value = Math.abs(amount).toLocaleString("en-IN", {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2
+  });
+  return `${sign}₹${value}`;
+}
+
+function renderSettlementLedger() {
+  if (!settlementState) return;
+  const games = settlementState.games || [];
+  const balances = settlementState.balances || [];
+  const transfers = settlementState.transfers || [];
+  const completedPayments = settlementState.completedPayments || [];
+  const roster = settlementState.roster || [];
+  const currentPlayerName = !isSpectator() && state?.you
+    ? state.players?.[state.you.seat]?.name
+    : null;
+  $("#ledger-game-count").textContent = games.length;
+  $("#ledger-stake").textContent = formatRupees(settlementState.stakePaise);
+  $("#ledger-started").textContent = new Date(settlementState.session.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  $("#ledger-balances").innerHTML = balances.map((balance) => {
+    const balanceClass = balance.amountPaise > 0 ? "is-positive" : balance.amountPaise < 0 ? "is-negative" : "is-even";
+    return `<div class="ledger-balance ${balanceClass}"><span>${balance.name}</span><strong>${formatRupees(balance.amountPaise, true)}</strong></div>`;
+  }).join("");
+
+  $("#ledger-transfers").innerHTML = transfers.length
+    ? transfers.map((transfer) => {
+      const isPayer = currentPlayerName === transfer.from;
+      const isReceiver = currentPlayerName === transfer.to;
+      const actorConfirmed = isPayer ? transfer.payerConfirmed : isReceiver ? transfer.receiverConfirmed : false;
+      const actionLabel = isPayer
+        ? actorConfirmed ? "Undo paid" : "Confirm paid"
+        : isReceiver ? actorConfirmed ? "Undo received" : "Confirm received" : "";
+      const action = actionLabel
+        ? `<button class="ledger-confirm-button ${actorConfirmed ? "is-reset" : ""}" type="button"
+            data-from="${transfer.from}" data-to="${transfer.to}" data-amount-paise="${transfer.amountPaise}"
+            data-confirmed="${actorConfirmed ? "false" : "true"}">${actionLabel}</button>`
+        : "";
+      return `<li class="ledger-transfer">
+        <div class="ledger-transfer-main"><span><b>${transfer.from}</b> pays <b>${transfer.to}</b></span><strong>${formatRupees(transfer.amountPaise)}</strong></div>
+        <div class="ledger-confirmation-row">
+          <span class="${transfer.payerConfirmed ? "is-confirmed" : ""}">${transfer.from}: ${transfer.payerConfirmed ? "paid ✓" : "paid pending"}</span>
+          <span class="${transfer.receiverConfirmed ? "is-confirmed" : ""}">${transfer.to}: ${transfer.receiverConfirmed ? "received ✓" : "received pending"}</span>
+          ${action}
+        </div>
+      </li>`;
+    }).join("")
+    : `<li class="is-empty">${games.length ? "Everyone is settled right now." : "Complete a four-human Court Piece game to start tracking."}</li>`;
+
+  $("#ledger-completed").innerHTML = completedPayments.length
+    ? completedPayments.map((payment) => {
+      const canReset = currentPlayerName === payment.from || currentPlayerName === payment.to;
+      const time = new Date(payment.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return `<li>
+        <div><span><b>${payment.from}</b> paid <b>${payment.to}</b></span><small>${time}</small></div>
+        <strong>${formatRupees(payment.amountPaise)}</strong>
+        ${canReset ? `<button class="ledger-reset-button" type="button" data-payment-id="${payment.id}">Reset</button>` : ""}
+      </li>`;
+    }).join("")
+    : `<li class="is-empty">No jointly confirmed payments yet.</li>`;
+
+  const filter = $("#ledger-player-filter");
+  filter.innerHTML = `<option value="">All</option>${roster.map((name) => `<option value="${name}">${name}</option>`).join("")}`;
+  filter.value = roster.includes(ledgerFilter) ? ledgerFilter : "";
+  ledgerFilter = filter.value;
+  const filteredGames = games.filter((entry) => !ledgerFilter || [...entry.teamA, ...entry.teamB].includes(ledgerFilter));
+  $("#ledger-games").innerHTML = filteredGames.length
+    ? filteredGames.map((entry) => {
+      const aWon = entry.winnerTeam === 0;
+      const time = new Date(entry.recordedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return `<li>
+        <span class="ledger-game-team ${aWon ? "is-winner" : ""}"><small>Team A</small><b>${entry.teamA.join(" + ")}</b></span>
+        <span class="ledger-game-result"><strong>${aWon ? "A" : "B"} won</strong><small>${time}</small></span>
+        <span class="ledger-game-team ${aWon ? "" : "is-winner"}"><small>Team B</small><b>${entry.teamB.join(" + ")}</b></span>
+      </li>`;
+    }).join("")
+    : `<li class="is-empty">${games.length ? "No games for this player yet." : "No tracked games today."}</li>`;
+
+  const newDay = $("#ledger-new-day");
+  const isHost = state && !isSpectator() && state.you.seat === state.hostSeat;
+  const roundActive = Boolean(state?.round && state.round.phase !== "round_over");
+  const hasUnsettledBalance = transfers.length > 0 || balances.some((balance) => balance.amountPaise !== 0);
+  newDay.classList.toggle("hidden", !isHost);
+  newDay.disabled = roundActive || hasUnsettledBalance;
+  newDay.title = roundActive
+    ? "Finish the current round first"
+    : hasUnsettledBalance ? "Both players must confirm every payment first" : "Archive this fully settled day";
+  $("#ledger-loading").classList.add("hidden");
+  $("#ledger-content").classList.remove("hidden");
+}
+
+async function refreshSettlementLedger() {
+  if (!settlementState) {
+    $("#ledger-loading").textContent = "Loading today’s games…";
+    $("#ledger-loading").classList.remove("hidden");
+    $("#ledger-content").classList.add("hidden");
+  }
+  try {
+    const result = await emit("get_settlement");
+    settlementState = result.settlement;
+    renderSettlementLedger();
+  } catch (error) {
+    $("#ledger-content").classList.add("hidden");
+    $("#ledger-loading").textContent = error?.message || "Could not load the ledger.";
+    $("#ledger-loading").classList.remove("hidden");
+  }
+}
+
 function createFxDemoCard(card, className) {
   const holder = document.createElement("div");
   holder.innerHTML = cardHtml(card, { disabled: true });
@@ -646,6 +764,8 @@ function returnToHome(message = "") {
   storedSession = null;
   previousState = null;
   state = null;
+  settlementState = null;
+  ledgerFilter = "";
   pendingBidValue = null;
   pendingBidKey = "";
   clearTimeout(hukumStoryTimer);
@@ -653,6 +773,7 @@ function returnToHome(message = "") {
   resetEffectStreaks();
   effectsApi()?.reset();
   game.classList.add("hidden");
+  $("#settlement-ledger")?.classList.add("hidden");
   home.classList.remove("hidden");
   $("#room-code").value = "";
   $("#room-availability")?.classList.add("hidden");
@@ -673,13 +794,75 @@ $("#hud-toggle")?.addEventListener("click", () => {
   const trigger = $("#hud-toggle");
   const open = trigger.getAttribute("aria-expanded") !== "true";
   closeFxLab();
+  closeSettlementLedger();
   setOverlayOpen($("#hud-drawer"), trigger, open);
 });
 $("#hud-close")?.addEventListener("click", closeHudDrawer);
+$("#ledger-toggle")?.addEventListener("click", () => {
+  const trigger = $("#ledger-toggle");
+  const open = trigger.getAttribute("aria-expanded") !== "true";
+  closeHudDrawer();
+  closeFxLab();
+  setOverlayOpen($("#settlement-ledger"), trigger, open);
+  if (open) refreshSettlementLedger();
+});
+$("#ledger-close")?.addEventListener("click", closeSettlementLedger);
+$("#ledger-refresh")?.addEventListener("click", refreshSettlementLedger);
+$("#ledger-player-filter")?.addEventListener("change", (event) => {
+  ledgerFilter = event.target.value;
+  renderSettlementLedger();
+});
+$("#ledger-transfers")?.addEventListener("click", async (event) => {
+  const button = event.target.closest(".ledger-confirm-button");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const result = await emit("confirm_settlement", {
+      from: button.dataset.from,
+      to: button.dataset.to,
+      amountPaise: Number(button.dataset.amountPaise),
+      confirmed: button.dataset.confirmed === "true"
+    });
+    settlementState = result.settlement;
+    renderSettlementLedger();
+    toast(button.dataset.confirmed === "true" ? "Confirmation saved" : "Confirmation reset");
+  } catch (error) {
+    setError(gameError, error);
+    await refreshSettlementLedger();
+  }
+});
+$("#ledger-completed")?.addEventListener("click", async (event) => {
+  const button = event.target.closest(".ledger-reset-button");
+  if (!button) return;
+  if (!window.confirm("Reset this completed payment? The amount will become due again and both people must reconfirm.")) return;
+  button.disabled = true;
+  try {
+    const result = await emit("reset_settlement", { paymentId: button.dataset.paymentId });
+    settlementState = result.settlement;
+    renderSettlementLedger();
+    toast("Settlement reset");
+  } catch (error) {
+    setError(gameError, error);
+    await refreshSettlementLedger();
+  }
+});
+$("#ledger-new-day")?.addEventListener("click", async () => {
+  if (!window.confirm("Archive this fully settled day and start a new ₹0 ledger?")) return;
+  try {
+    const result = await emit("start_new_settlement_day");
+    settlementState = result.settlement;
+    ledgerFilter = "";
+    renderSettlementLedger();
+    toast("New ledger day started");
+  } catch (error) {
+    setError(gameError, error);
+  }
+});
 $("#fx-lab-toggle")?.addEventListener("click", () => {
   const trigger = $("#fx-lab-toggle");
   const open = trigger.getAttribute("aria-expanded") !== "true";
   closeHudDrawer();
+  closeSettlementLedger();
   setOverlayOpen($("#fx-lab"), trigger, open);
 });
 $("#fx-lab-close")?.addEventListener("click", closeFxLab);
@@ -1664,6 +1847,7 @@ function render() {
   game.classList.remove("hidden");
   $("#copy-code").textContent = state.code;
   $("#game-name").textContent = meta.eyebrow;
+  $("#ledger-toggle").classList.toggle("hidden", isSpectator());
   $("#score-a-label").textContent = meta.scoreA;
   $("#score-b-label").textContent = meta.scoreB;
   $("#score-a").textContent = state.score[0];
@@ -1707,11 +1891,17 @@ function render() {
 }
 
 socket.on("room_state", (nextState) => {
+  const roundJustFinished = state?.round?.phase !== "round_over" && nextState?.round?.phase === "round_over";
   previousState = state;
   state = nextState;
   applyTableTheme(state.tableTheme);
   render();
+  if (roundJustFinished && !$("#settlement-ledger").classList.contains("hidden")) refreshSettlementLedger();
   requestAnimationFrame(() => window.scrollTo(0, 0));
+});
+socket.on("settlement_changed", () => {
+  settlementState = null;
+  if (!$("#settlement-ledger").classList.contains("hidden")) refreshSettlementLedger();
 });
 socket.on("kicked", (payload = {}) => {
   returnToHome(payload.reason || "The host removed you from the table.");
@@ -1723,6 +1913,8 @@ socket.on("room_destroyed", (payload = {}) => {
   storedSession = null;
   state = null;
   previousState = null;
+  settlementState = null;
+  ledgerFilter = "";
   game.classList.add("hidden");
   home.classList.remove("hidden");
   applyTableTheme(createTableTheme);

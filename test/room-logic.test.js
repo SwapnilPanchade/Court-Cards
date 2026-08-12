@@ -50,13 +50,13 @@ test("leave in lobby frees the seat so another player can join", () => {
   assert.equal(result.destroyed, false);
   assert.equal(room.players[1], null);
   const joined = joinAsPlayer(room, {
-    name: "New",
+    name: "Saurabh",
     socketId: "n",
     avatarId: "sher",
     randomUUID: () => "uuid-2"
   });
   assert.equal(joined.seat, 1);
-  assert.equal(room.players[1].name, "New");
+  assert.equal(room.players[1].name, "Saurabh");
 });
 
 test("mid-round leave replaces the human with a bot", () => {
@@ -89,7 +89,7 @@ test("joiner can choose which bot seat to replace", () => {
   room.round = createRound(3, room.settings, () => 0.5);
   assert.deepEqual(botSeats(room), [1, 2, 3]);
   const joined = joinAsPlayer(room, {
-    name: "Swap",
+    name: "Saurabh",
     replaceSeat: 2,
     socketId: "x",
     avatarId: "sher",
@@ -97,7 +97,7 @@ test("joiner can choose which bot seat to replace", () => {
   });
   assert.equal(joined.seat, 2);
   assert.equal(room.players[2].bot, false);
-  assert.equal(room.players[2].name, "Swap");
+  assert.equal(room.players[2].name, "Saurabh");
   assert.equal(room.players[1].bot, true);
 });
 
@@ -106,11 +106,22 @@ test("join without replaceSeat asks to choose a bot when no empty seats", () => 
   room.players[1] = makeBot(1, () => "b1");
   room.players[2] = makeBot(2, () => "b2");
   room.players[3] = makeBot(3, () => "b3");
-  assert.throws(() => joinAsPlayer(room, { name: "X", socketId: "s", randomUUID: () => "t" }), (error) => {
+  assert.throws(() => joinAsPlayer(room, { name: "Saurabh", socketId: "s", randomUUID: () => "t" }), (error) => {
     assert.equal(error.code, "CHOOSE_BOT");
     assert.equal(error.bots.length, 3);
     return true;
   });
+});
+
+test("new players must use a unique approved roster name", () => {
+  const room = createEmptyRoom("ABC12", human("Swapnil", "host"));
+  assert.throws(() => joinAsPlayer(room, { name: "Unknown", socketId: "s" }), /player list/);
+  assert.throws(() => joinAsPlayer(room, { name: "swapnil", socketId: "s" }), /already seated/);
+});
+
+test("old sessions with names outside the roster cannot resume", () => {
+  const room = createEmptyRoom("ABC12", human("Old Name", "old-token"));
+  assert.throws(() => joinAsPlayer(room, { token: "old-token", socketId: "next" }), /player list/);
 });
 
 test("team switch is allowed in lobby and between rounds, blocked mid-round", () => {

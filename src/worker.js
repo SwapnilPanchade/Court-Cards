@@ -1,7 +1,8 @@
 import { RoomDurableObject } from "./room-do.js";
+import { SettlementLedgerDurableObject } from "./settlement-do.js";
 import { makeRoomCode } from "./room-logic.js";
 
-export { RoomDurableObject };
+export { RoomDurableObject, SettlementLedgerDurableObject };
 
 async function createRoom(request, env) {
   const body = await request.json().catch(() => ({}));

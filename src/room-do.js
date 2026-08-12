@@ -49,6 +49,12 @@ import {
   transferHost,
   updateRoomSettings
 } from "./room-logic.js";
+import {
+  assertApprovedHumanPlayers,
+  createRoundSettlement,
+  normalizeRosterName,
+  settlementEntryForRound
+} from "./settlement.js";
 
 const ROOM_KEY = "room";
 
@@ -103,8 +109,12 @@ export class RoomDurableObject {
     }
 
     const body = await request.json();
-    const playerName = cleanName(body.name);
-    if (!playerName) return Response.json({ ok: false, error: "Enter your name." }, { status: 400 });
+    let playerName;
+    try {
+      playerName = normalizeRosterName(body.name);
+    } catch (error) {
+      return Response.json({ ok: false, error: error.message }, { status: 400 });
+    }
 
     const code = String(body.code || "").trim().toUpperCase();
     const token = crypto.randomUUID();
@@ -147,12 +157,21 @@ export class RoomDurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  safeSend(ws, body) {
+    try {
+      ws.send(JSON.stringify(body));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async webSocketMessage(ws, message) {
     let data;
     try {
       data = JSON.parse(typeof message === "string" ? message : new TextDecoder().decode(message));
     } catch {
-      ws.send(JSON.stringify({ ok: false, error: "Invalid message." }));
+      this.safeSend(ws, { ok: false, error: "Invalid message." });
       return;
     }
 
@@ -160,12 +179,12 @@ export class RoomDurableObject {
     try {
       const result = await this.dispatch(ws, event, payload);
       await this.recordHumanActivity(ws);
-      if (id !== undefined) ws.send(JSON.stringify({ id, ok: true, ...result }));
+      if (id !== undefined) this.safeSend(ws, { id, ok: true, ...result });
     } catch (error) {
       const body = { id, ok: false, error: error.message || "Something went wrong." };
       if (error.code) body.code = error.code;
       if (error.bots) body.bots = error.bots;
-      if (id !== undefined) ws.send(JSON.stringify(body));
+      if (id !== undefined) this.safeSend(ws, body);
     }
   }
 
@@ -287,9 +306,132 @@ export class RoomDurableObject {
         return this.requestRestart(ws);
       case "respond_restart":
         return this.respondRestart(ws, payload);
+      case "get_settlement":
+        return this.getSettlement(ws);
+      case "confirm_settlement":
+        return this.confirmSettlement(ws, payload);
+      case "reset_settlement":
+        return this.resetSettlement(ws, payload);
+      case "start_new_settlement_day":
+        return this.startNewSettlementDay(ws);
       default:
         throw new Error("Unknown event.");
     }
+  }
+
+  createTrackedRound(room) {
+    const round = createRound(room.dealer, room.settings);
+    round.settlement = createRoundSettlement(room);
+    return round;
+  }
+
+  queueCompletedSettlement(room, round) {
+    recordRoundResult(room, round);
+    const entry = settlementEntryForRound(room, round);
+    if (!entry || round.settlementRecorded) return;
+    room.pendingSettlements ||= [];
+    if (!room.pendingSettlements.some((item) => item.id === entry.id)) {
+      room.pendingSettlements.push(entry);
+    }
+    round.settlementRecorded = true;
+    round.settlementStatus = "queued";
+  }
+
+  async flushPendingSettlements({ throwOnError = false } = {}) {
+    const room = this.room;
+    if (!room?.pendingSettlements?.length) return;
+    const ledger = this.env.LEDGER.getByName("court-piece-private-ledger");
+    let changed = false;
+
+    for (const entry of [...room.pendingSettlements]) {
+      try {
+        await ledger.recordGame(entry);
+        room.pendingSettlements = room.pendingSettlements.filter((item) => item.id !== entry.id);
+        if (room.round?.settlement?.id === entry.id) room.round.settlementStatus = "recorded";
+        changed = true;
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "settlement_record_failed",
+          roomCode: room.code,
+          settlementId: entry.id,
+          message: error?.message || "Unknown settlement error"
+        }));
+        if (throwOnError) throw new Error("Could not sync the money ledger. Try again.");
+        break;
+      }
+    }
+
+    if (changed) await this.saveRoom();
+  }
+
+  async getSettlement(ws) {
+    this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room) throw new Error("Join a room first.");
+    await this.flushPendingSettlements();
+    const ledger = this.env.LEDGER.getByName("court-piece-private-ledger");
+    return { settlement: await ledger.getSnapshot() };
+  }
+
+  settlementActor(room, session) {
+    const player = room.players[session.seat];
+    if (!player || player.bot || player.token !== session.token) {
+      throw new Error("Your player session is no longer active.");
+    }
+    return normalizeRosterName(player.name);
+  }
+
+  async confirmSettlement(ws, payload) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room) throw new Error("Join a room first.");
+    const actor = this.settlementActor(room, session);
+    const from = normalizeRosterName(payload.from);
+    const to = normalizeRosterName(payload.to);
+    if (actor !== from && actor !== to) {
+      throw new Error("Only the payer or receiver can confirm this settlement.");
+    }
+    await this.flushPendingSettlements({ throwOnError: true });
+    const ledger = this.env.LEDGER.getByName("court-piece-private-ledger");
+    const settlement = await ledger.confirmSettlement(actor, payload);
+    this.broadcastSettlementChanged();
+    return { settlement };
+  }
+
+  async resetSettlement(ws, payload) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room) throw new Error("Join a room first.");
+    const actor = this.settlementActor(room, session);
+    const ledger = this.env.LEDGER.getByName("court-piece-private-ledger");
+    const current = await ledger.getSnapshot();
+    const payment = current.completedPayments.find((item) => item.id === payload.paymentId);
+    if (!payment) throw new Error("This completed settlement was not found.");
+    if (actor !== payment.from && actor !== payment.to) {
+      throw new Error("Only the payer or receiver can reset this settlement.");
+    }
+    const settlement = await ledger.resetSettlement(actor, payload.paymentId);
+    this.broadcastSettlementChanged();
+    return { settlement };
+  }
+
+  async startNewSettlementDay(ws) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room) throw new Error("Join a room first.");
+    if (session.seat !== room.hostSeat) throw new Error("Only the host can start a new ledger day.");
+    if (room.round && room.round.phase !== "round_over") {
+      throw new Error("Finish the current round before starting a new ledger day.");
+    }
+    await this.flushPendingSettlements({ throwOnError: true });
+    const ledger = this.env.LEDGER.getByName("court-piece-private-ledger");
+    const current = await ledger.getSnapshot();
+    if (current.transfers.length || current.balances.some((balance) => balance.amountPaise !== 0)) {
+      throw new Error("Every payment needs both confirmations before starting a new day.");
+    }
+    const settlement = await ledger.startNewDay();
+    this.broadcastSettlementChanged();
+    return { settlement };
   }
 
   async joinRoom(ws, payload) {
@@ -401,8 +543,9 @@ export class RoomDurableObject {
     if (!room) throw new Error("Join a room first.");
     if (session.seat !== room.hostSeat) throw new Error("Only the host can start.");
     if (room.players.some((player) => !player)) throw new Error("Four players are required.");
+    assertApprovedHumanPlayers(room.players);
     if (room.round && room.round.phase !== "round_over") throw new Error("A round is already active.");
-    room.round = createRound(room.dealer, room.settings);
+    room.round = this.createTrackedRound(room);
     room.settingsLocked = true;
     room.teamSwitchRequest = null;
     await this.saveRoom();
@@ -641,8 +784,9 @@ export class RoomDurableObject {
     const room = await this.loadRoom();
     if (!room?.round || room.round.phase !== "round_over") throw new Error("Finish the current round first.");
     if (session.seat !== room.hostSeat) throw new Error("Only the host can start the next round.");
+    await this.flushPendingSettlements();
     room.dealer = (room.dealer + 1) % 4;
-    room.round = createRound(room.dealer, room.settings);
+    room.round = this.createTrackedRound(room);
     room.restartVote = null;
     room.teamSwitchRequest = null;
     await this.saveRoom();
@@ -690,7 +834,7 @@ export class RoomDurableObject {
     room.restartVote = null;
     room.teamSwitchRequest = null;
     room.dealer = (room.dealer + 1) % 4;
-    room.round = createRound(room.dealer, room.settings);
+    room.round = this.createTrackedRound(room);
     room.alarm = null;
     await this.ctx.storage.deleteAlarm();
   }
@@ -721,6 +865,15 @@ export class RoomDurableObject {
     }
   }
 
+  broadcastSettlementChanged() {
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = ws.deserializeAttachment() || {};
+      if (attachment.role === "player") {
+        this.safeSend(ws, { event: "settlement_changed", payload: {} });
+      }
+    }
+  }
+
   broadcastDestroyed(reason = "no_humans") {
     for (const ws of this.ctx.getWebSockets()) {
       try {
@@ -746,6 +899,7 @@ export class RoomDurableObject {
   }
 
   async destroyIdleRoom(room) {
+    await this.flushPendingSettlements({ throwOnError: true });
     room.destroyed = true;
     await this.saveRoom();
     this.broadcastDestroyed("human_inactivity");
@@ -818,9 +972,10 @@ export class RoomDurableObject {
     if (alarm.kind === "collect") {
       if (round.phase !== "trick_complete") return;
       collectGameTrick(round);
-      if (round.phase === "round_over") recordRoundResult(room, round);
+      if (round.phase === "round_over") this.queueCompletedSettlement(room, round);
       room.alarm = null;
       await this.saveRoom();
+      await this.flushPendingSettlements();
       this.broadcast();
       await this.scheduleAfterStateChange();
       return;
@@ -875,9 +1030,10 @@ export class RoomDurableObject {
         const selected = pickTimeoutCard(round, expectedSeat);
         playGameCard(round, expectedSeat, selected.id);
       } else return;
-      if (round.phase === "round_over") recordRoundResult(room, round);
+      if (round.phase === "round_over") this.queueCompletedSettlement(room, round);
       room.alarm = null;
       await this.saveRoom();
+      await this.flushPendingSettlements();
       this.broadcast();
       await this.scheduleAfterStateChange();
     }

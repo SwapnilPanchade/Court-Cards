@@ -27,10 +27,12 @@ More detail: [DEPLOY.md](DEPLOY.md).
 
 - Play with four friends, or fill empty seats with bots (joiners can pick which bot to replace).
 - Cloudflare Worker serves the UI; each room is a Durable Object with WebSockets.
+- Players choose from the fixed eight-person private roster; duplicate names cannot share a table.
+- A shared Cloudflare ledger records completed four-human Court Piece games at ₹5 per player and calculates minimum transfers, even when teams change between deals. Payments clear only after payer and receiver both confirm.
 - Choose Team A or Team B before the deal; request a team switch anytime except mid-round.
 - Host can transfer ownership; exit frees a seat in lobby (or becomes a bot mid-round).
 - Host-configurable deck size, Normal or Hidden Hukum, and optional Auction Hukum (locked after start).
-- Five table themes and ten room-scoped comic avatars.
+- Six table themes and ten room-scoped comic avatars.
 - Scores keep accumulating for the life of the room; room closes when no humans remain.
 - Responsive table for mobile landscape, with portrait fallback and desktop layout.
 
@@ -48,6 +50,16 @@ More detail: [DEPLOY.md](DEPLOY.md).
 - Every won deal gives the winning team 1 point on the room scoreboard. Scores do not auto-reset.
 - Each turn has a 40-second timer. On timeout, a legal card is played automatically.
 - Spectators can join, follow one player, and watch that hand (read-only).
+
+## Money ledger
+
+- Roster: Pradeep, Swapnil, Ajit, Ajay, Saurabh, John, James, and Rahul.
+- Every completed four-human Court Piece deal charges each losing player ₹5 and credits each winning player ₹5 (₹10 per team).
+- Teams are snapshotted when each deal starts, so later team changes do not rewrite older results.
+- Bot-started deals, Judgment, Rummy, and unfinished/restarted deals do not affect balances.
+- The Ledger drawer shows net balances, minimum "who pays whom" transfers, bilateral payment confirmations, completed payments, game history, and a player filter.
+- The payer confirms "Paid" and the receiver confirms "Received"; no balance clears until both agree. Either involved player can reset a completed payment, which restores the debt and requires both confirmations again.
+- The shared ledger lives in its own SQLite-backed Durable Object. A host can archive the day only after every balance reaches ₹0, so unpaid balances cannot be wiped by a one-click reset.
 
 Rules live in `src/game.js`.
 
@@ -80,4 +92,5 @@ With `npm start` running:
 
 ```bash
 npm run smoke
+npm run smoke:settlement
 ```

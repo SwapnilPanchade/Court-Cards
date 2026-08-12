@@ -30,6 +30,7 @@ import {
   botRummyDrawSource,
   botRummyDiscard
 } from "./rummy.js";
+import { PLAYER_NAMES, canonicalRosterName, normalizeRosterName } from "./settlement.js";
 
 export const TABLE_THEMES = ["noir", "comic", "neon", "adda", "gully", "atelier"];
 export const GAME_TYPES = ["court-piece", "judgment", "rummy"];
@@ -178,6 +179,7 @@ export function createEmptyRoom(code, hostPlayer, options = {}) {
     matchWinner: null,
     restartVote: null,
     teamSwitchRequest: null,
+    pendingSettlements: [],
     alarm: null,
     tableTheme: DEFAULT_TABLE_THEME,
     settings: {
@@ -411,6 +413,7 @@ export function joinAsPlayer(room, {
   if (seat >= 0) {
     const existing = room.players[seat];
     if (existing.bot) throw new Error("Invalid session token.");
+    existing.name = normalizeRosterName(existing.name);
     existing.socketId = socketId;
     if (!room.round && avatarId !== undefined) {
       existing.avatarId = normalizeAvatarId(avatarId, existing.avatarId);
@@ -418,8 +421,10 @@ export function joinAsPlayer(room, {
     return { seat, token: existing.token, avatarId: existing.avatarId, resumed: true };
   }
 
-  const playerName = cleanName(name);
-  if (!playerName) throw new Error("Enter your name.");
+  const playerName = normalizeRosterName(name);
+  if (room.players.some((item) => item && !item.bot && canonicalRosterName(item.name) === playerName)) {
+    throw new Error(`${playerName} is already seated at this table.`);
+  }
   const nextToken = randomUUID();
   const nextAvatar = normalizeAvatarId(avatarId, undefined);
 
@@ -594,7 +599,7 @@ export function roomView(room, viewer) {
     suits: SUITS,
     settings: room.settings,
     settingsLocked: Boolean(room.settingsLocked || room.round),
-    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS }
+    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS, playerNames: PLAYER_NAMES }
   };
 }
 

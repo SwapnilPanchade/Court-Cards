@@ -26,8 +26,9 @@ function action(client, event, payload = {}) {
 
 async function main() {
   await Promise.all([...clients, spectator].map((client) => waitFor(client, "connect")));
-  const created = await action(clients[0], "create_room", { name: "Player 1" });
-  await Promise.all([1, 2, 3].map((index) => action(clients[index], "join_room", { code: created.code, name: `Player ${index + 1}` })));
+  const names = ["Swapnil", "Pradeep", "Ajit", "Ajay"];
+  const created = await action(clients[0], "create_room", { name: names[0] });
+  await Promise.all([1, 2, 3].map((index) => action(clients[index], "join_room", { code: created.code, name: names[index] })));
   await action(spectator, "join_spectator", { code: created.code, name: "Buddy" });
   await action(clients[0], "update_settings", { deckSize: 36, mode: "single" });
 

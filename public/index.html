@@ -66,7 +66,18 @@
           </fieldset>
 
           <label for="name">Your name</label>
-          <input id="name" maxlength="18" autocomplete="name" placeholder="e.g. Swapnil" />
+          <select id="name" autocomplete="name">
+            <option value="">Choose your name</option>
+            <option>Pradeep</option>
+            <option>Swapnil</option>
+            <option>Ajit</option>
+            <option>Ajay</option>
+            <option>Saurabh</option>
+            <option>John</option>
+            <option>James</option>
+            <option>Rahul</option>
+          </select>
+          <small class="player-picker-note">Fixed 8-player group · one name per table</small>
 
           <fieldset class="avatar-picker avatar-picker-home">
             <legend>Pick your room avatar</legend>
@@ -202,6 +213,9 @@
               <input id="effects-toggle" type="checkbox" checked />
               <span class="control-icon" aria-hidden="true">✦</span><span class="control-label">FX</span>
             </label>
+            <button id="ledger-toggle" class="control-toggle ledger-toggle" type="button" aria-label="Money ledger" aria-expanded="false" aria-controls="settlement-ledger">
+              <span class="control-icon" aria-hidden="true">₹</span><span class="control-label">Ledger</span>
+            </button>
             <button id="fx-lab-toggle" class="control-toggle fx-lab-toggle" type="button" aria-expanded="false" aria-controls="fx-lab">
               <span class="control-icon" aria-hidden="true">FX</span><span class="control-label">Demo</span>
             </button>
@@ -229,6 +243,58 @@
             <div class="hud-stat"><span>Team B</span><strong id="hud-score-b">0</strong><small id="hud-hands-b">0 hands</small></div>
           </div>
           <ol id="hud-bid-history" class="hud-bid-history" aria-label="Hukum call history"></ol>
+        </section>
+
+        <section id="settlement-ledger" class="settlement-ledger hidden" role="dialog" aria-labelledby="ledger-title">
+          <div class="ledger-head">
+            <div>
+              <span class="mini-label">PRIVATE GAME LEDGER</span>
+              <strong id="ledger-title">Who owes whom</strong>
+              <small>₹5 per player · ₹10 changes hands per game</small>
+            </div>
+            <div class="ledger-head-actions">
+              <button id="ledger-refresh" class="text-button" type="button">Refresh</button>
+              <button id="ledger-close" class="text-button" type="button">Close</button>
+            </div>
+          </div>
+          <div id="ledger-loading" class="ledger-loading">Loading today’s games…</div>
+          <div id="ledger-content" class="ledger-content hidden">
+            <div class="ledger-stats">
+              <div><span>Games today</span><strong id="ledger-game-count">0</strong></div>
+              <div><span>Per player</span><strong id="ledger-stake">₹5</strong></div>
+              <div><span>Started</span><strong id="ledger-started">—</strong></div>
+            </div>
+
+            <section class="ledger-section">
+              <div class="ledger-section-title"><span>Net balance</span><small>+ gets · − pays</small></div>
+              <div id="ledger-balances" class="ledger-balances"></div>
+            </section>
+
+            <section class="ledger-section">
+              <div class="ledger-section-title"><span>Settle now</span><small>Both people must confirm</small></div>
+              <ol id="ledger-transfers" class="ledger-transfers"></ol>
+            </section>
+
+            <section class="ledger-section">
+              <div class="ledger-section-title"><span>Completed payments</span><small>Either person can reset</small></div>
+              <ol id="ledger-completed" class="ledger-completed"></ol>
+            </section>
+
+            <section class="ledger-section ledger-history-section">
+              <div class="ledger-section-title">
+                <span>Game history</span>
+                <label for="ledger-player-filter">Player
+                  <select id="ledger-player-filter"><option value="">All</option></select>
+                </label>
+              </div>
+              <ol id="ledger-games" class="ledger-games"></ol>
+            </section>
+
+            <div class="ledger-footer">
+              <span>Stored in the game’s Cloudflare ledger. A day can close only at ₹0.</span>
+              <button id="ledger-new-day" class="secondary" type="button">Archive settled day</button>
+            </div>
+          </div>
         </section>
 
         <div id="spectator-bar" class="spectator-bar hidden">

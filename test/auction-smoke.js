@@ -30,15 +30,15 @@ function action(client, event, payload = {}) {
 
 async function main() {
   await Promise.all(clients.map((client) => waitFor(client, "connect")));
-  await assert.rejects(() => action(clients[4], "create_room", { name: "Invalid", tableTheme: "casino" }), /valid table theme/);
+  await assert.rejects(() => action(clients[4], "create_room", { name: "Rahul", tableTheme: "casino" }), /valid table theme/);
 
-  const created = await action(clients[0], "create_room", { name: "Host", tableTheme: "neon", auctionMode: true, avatarId: "jugaadu" });
+  const created = await action(clients[0], "create_room", { name: "Swapnil", tableTheme: "neon", auctionMode: true, avatarId: "jugaadu" });
   assert.equal(created.tableTheme, "neon");
   assert.equal(created.auctionMode, true);
   assert.equal(created.avatarId, "jugaadu");
   await waitForState(0, (state) => state.code === created.code && state.tableTheme === "neon" && state.players[0]?.avatarId === "jugaadu");
 
-  const joined = await action(clients[1], "join_room", { code: created.code, name: "Player 2", avatarId: "chai-champion" });
+  const joined = await action(clients[1], "join_room", { code: created.code, name: "Pradeep", avatarId: "chai-champion" });
   assert.equal(joined.avatarId, "chai-champion");
   await action(clients[1], "choose_avatar", { avatarId: "filmy-villain" });
   await waitForState(0, (state) => state.players[1]?.avatarId === "filmy-villain");
@@ -46,8 +46,8 @@ async function main() {
   assert.deepEqual(moved, { ok: true, seat: 3, team: 1 });
   await waitForState(0, (state) => state.you.seat === 3 && state.hostSeat === 3);
 
-  await action(clients[2], "join_room", { code: created.code, name: "Player 3" });
-  await action(clients[3], "join_room", { code: created.code, name: "Player 4" });
+  await action(clients[2], "join_room", { code: created.code, name: "Ajit" });
+  await action(clients[3], "join_room", { code: created.code, name: "Ajay" });
   await waitForState(0, (state) => state.players.filter(Boolean).length === 4);
 
   await action(clients[0], "start_game");
@@ -76,7 +76,7 @@ async function main() {
   const playing = await waitForState(0, (state) => state.round?.phase === "playing");
   assert.equal(playing.round.trump, "hearts");
 
-  const botRoom = await action(clients[4], "create_room", { name: "Bot Host", tableTheme: "comic", auctionMode: true });
+  const botRoom = await action(clients[4], "create_room", { name: "Saurabh", tableTheme: "comic", auctionMode: true });
   await waitForState(4, (state) => state.code === botRoom.code);
   await action(clients[4], "fill_bots");
   const movedBotHost = await action(clients[4], "choose_team", { team: "B" });

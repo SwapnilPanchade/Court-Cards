@@ -14,7 +14,7 @@ function action(client, event, payload = {}) {
 }
 
 bots.forEach((bot) => {
-  bot.client.on("connect", () => action(bot.client, "join_room", { code, name: `Bot ${bot.number}` })
+  bot.client.on("connect", () => action(bot.client, "join_room", { code, name: ["John", "James", "Rahul"][bot.number - 1] })
     .then(() => console.log(`Bot ${bot.number} joined ${code}`))
     .catch((error) => console.error(error.message)));
 

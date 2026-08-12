@@ -23,8 +23,9 @@ function action(client, event, payload = {}) {
 
 async function main() {
   await Promise.all(clients.map((client) => waitFor(client, "connect")));
-  const room = await action(clients[0], "create_room", { name: "Timer 1" });
-  await Promise.all([1, 2, 3].map((seat) => action(clients[seat], "join_room", { code: room.code, name: `Timer ${seat + 1}` })));
+  const names = ["Swapnil", "Pradeep", "Ajit", "Ajay"];
+  const room = await action(clients[0], "create_room", { name: names[0] });
+  await Promise.all([1, 2, 3].map((seat) => action(clients[seat], "join_room", { code: room.code, name: names[seat] })));
   await action(clients[0], "start_game");
   const autoPlayed = waitFor(clients[0], "room_state", (state) => state.round?.handCounts[0] === 8, 3000);
   await action(clients[0], "choose_trump", { suit: "spades" });

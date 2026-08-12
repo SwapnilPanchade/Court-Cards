@@ -11,6 +11,14 @@ binding = "ASSETS"
 name = "ROOM"
 class_name = "RoomDurableObject"
 
+[[durable_objects.bindings]]
+name = "LEDGER"
+class_name = "SettlementLedgerDurableObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RoomDurableObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SettlementLedgerDurableObject"]

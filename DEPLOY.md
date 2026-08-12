@@ -30,10 +30,10 @@ You get a public URL like:
 
 `https://court-piece.fucksaurya.workers.dev`
 
-Share that with friends — rooms are Durable Objects (one per room code).
+Share that with friends — rooms are Durable Objects (one per room code). The private ₹5 settlement ledger uses a separate SQLite-backed Durable Object shared across rooms; Wrangler applies its `v2` class migration during deployment. A payment changes balances only after its payer and receiver both confirm, and a day cannot be archived with money still due.
 
 ## Health
 
 `GET /health` → `{ "ok": true }`
 
-Rooms auto-close when the last **human** leaves (bots alone do not keep a room alive). Scores persist for the life of the room.
+Rooms auto-close when the last **human** leaves (bots alone do not keep a room alive). Scores persist for the life of the room. Completed four-human Court Piece settlements persist in the shared ledger after their room closes.

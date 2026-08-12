@@ -53,20 +53,20 @@ async function waitFor(client, predicate, label) {
 const created = await fetch(`${BASE}/api/create`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ name: "Host", avatarId: "sher", tableTheme: "noir" })
+  body: JSON.stringify({ name: "Swapnil", avatarId: "sher", tableTheme: "noir" })
 }).then((r) => r.json());
 if (!created.ok) throw new Error(created.error);
 
 const host = await connect(created.code);
-await host.emit("join_room", { code: created.code, token: created.token, name: "Host" });
-await waitFor(host, (s) => s.players[0]?.name === "Host", "host seated");
+await host.emit("join_room", { code: created.code, token: created.token, name: "Swapnil" });
+await waitFor(host, (s) => s.players[0]?.name === "Swapnil", "host seated");
 await host.emit("fill_bots");
 await waitFor(host, (s) => s.players.every(Boolean), "bots filled");
 
 const guest = await connect(created.code);
 await guest.emit("join_room", {
   code: created.code,
-  name: "Guest",
+  name: "Pradeep",
   avatarId: "jugaadu",
   replaceSeat: 1
 });
