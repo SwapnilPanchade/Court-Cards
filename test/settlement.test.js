@@ -16,8 +16,8 @@ function player(name, bot = false) {
   return { name, bot };
 }
 
-test("player names are restricted to the fixed eight-person roster", () => {
-  assert.equal(PLAYER_NAMES.length, 8);
+test("player names are restricted to the fixed nine-person roster", () => {
+  assert.equal(PLAYER_NAMES.length, 9);
   assert.equal(canonicalRosterName(" swapnil "), "Swapnil");
   assert.equal(normalizeRosterName("PRADEEP"), "Pradeep");
   assert.throws(() => normalizeRosterName("Unknown"), /player list/);

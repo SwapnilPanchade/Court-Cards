@@ -27,7 +27,7 @@ More detail: [DEPLOY.md](DEPLOY.md).
 
 - Play with four friends, or fill empty seats with bots (joiners can pick which bot to replace).
 - Cloudflare Worker serves the UI; each room is a Durable Object with WebSockets.
-- Players choose from the fixed eight-person private roster; duplicate names cannot share a table.
+- Players choose from the fixed nine-person private roster; duplicate names cannot share a table.
 - A shared Cloudflare ledger records completed four-human Court Piece games at ₹5 per player and calculates minimum transfers, even when teams change between deals. Payments clear only after payer and receiver both confirm.
 - Choose Team A or Team B before the deal; request a team switch anytime except mid-round.
 - Host can transfer ownership; exit frees a seat in lobby (or becomes a bot mid-round).
@@ -53,7 +53,7 @@ More detail: [DEPLOY.md](DEPLOY.md).
 
 ## Money ledger
 
-- Roster: Pradeep, Swapnil, Ajit, Ajay, Saurabh, John, James, and Rahul.
+- Roster: Pradeep, Swapnil, Ajit, Ajay, Saurabh, John, James, Rahul, and Nishant.
 - Every completed four-human Court Piece deal charges each losing player ₹5 and credits each winning player ₹5 (₹10 per team).
 - Teams are snapshotted when each deal starts, so later team changes do not rewrite older results.
 - Bot-started deals, Judgment, Rummy, and unfinished/restarted deals do not affect balances.

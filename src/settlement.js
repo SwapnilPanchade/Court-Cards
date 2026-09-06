@@ -6,7 +6,8 @@ export const PLAYER_NAMES = Object.freeze([
   "Saurabh",
   "John",
   "James",
-  "Rahul"
+  "Rahul",
+  "Nishant"
 ]);
 
 export const STAKE_PAISE = 500;
