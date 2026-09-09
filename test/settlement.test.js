@@ -44,6 +44,29 @@ test("a Court Piece round snapshots teams and creates a ₹5-per-player entry", 
   assert.deepEqual(entry.teamB, ["Ajit", "Ajay"]);
 });
 
+test("a six-player table settles as two teams of three at ₹5 per player", () => {
+  const room = {
+    code: "SIX12",
+    gameType: "court-piece",
+    players: [
+      player("Swapnil"), player("Ajit"), player("Pradeep"),
+      player("Ajay"), player("Saurabh"), player("Rahul")
+    ]
+  };
+  const settlement = createRoundSettlement(room, () => "six-1");
+  assert.equal(settlement.eligible, true);
+  const entry = settlementEntryForRound(room, { phase: "round_over", winner: 1, settlement }, 2_000);
+  assert.deepEqual(entry.teamA, ["Swapnil", "Pradeep", "Saurabh"]); // even seats
+  assert.deepEqual(entry.teamB, ["Ajit", "Ajay", "Rahul"]); // odd seats
+
+  const summary = summarizeSettlement([entry]);
+  const balances = Object.fromEntries(summary.balances.map((item) => [item.name, item.amountPaise]));
+  // Team B won: each B member +₹5, each A member −₹5, and it nets to zero.
+  assert.equal(balances.Ajit, STAKE_PAISE);
+  assert.equal(balances.Swapnil, -STAKE_PAISE);
+  assert.equal(summary.balances.reduce((sum, item) => sum + item.amountPaise, 0), 0);
+});
+
 test("bot rounds and non-Court-Piece rounds do not affect money", () => {
   const botRoom = {
     code: "BOT12",

@@ -396,7 +396,7 @@ async function previewRoomAvailability() {
       result.innerHTML = `<strong>${bots.length} bot${bots.length === 1 ? "" : "s"} available</strong><span>${empty.length ? `${empty.length} open seat${empty.length === 1 ? "" : "s"} first` : "Tap Join, then choose the seat you replace"}</span>`;
       if (!empty.length) joinButton.textContent = "Join & replace bot";
     } else if (empty.length) {
-      result.innerHTML = `<strong>${empty.length} seat${empty.length === 1 ? "" : "s"} open</strong><span>${humans}/4 people at this table</span>`;
+      result.innerHTML = `<strong>${empty.length} seat${empty.length === 1 ? "" : "s"} open</strong><span>${humans}/${info.playerCount || (info.players || []).length || 4} people at this table</span>`;
     } else {
       result.innerHTML = "<strong>Human table is full</strong><span>You can still watch as spectator</span>";
     }
@@ -426,10 +426,16 @@ async function enterRoom(kind) {
   try {
     const avatarId = selectedAvatar("create-avatar", selectedRoomAvatar);
     if (kind === "create") {
+      const gameType = selectedGame();
+      // Only Court Piece offers a 6-seat table; the others are always 4.
+      const playerCount = gameType === "court-piece"
+        ? Number(document.querySelector('input[name="create-player-count"]:checked')?.value) || 4
+        : 4;
       const result = await emit("create_room", {
         name,
         avatarId,
-        gameType: selectedGame(),
+        gameType,
+        playerCount,
         tableTheme: selectedTheme("create-table-theme", createTableTheme),
         auctionMode: readAuctionMode($("#create-auction-mode") || $("#auction-mode"), false)
       });
@@ -971,13 +977,41 @@ function perspectiveSeat() {
   return isSpectator() ? (state.you.watchingSeat ?? 0) : state.you.seat;
 }
 
+// How many seats this table has (4 or 6). The server always sends a players
+// array of the right length, so it is the single source of truth.
+function tableSize() {
+  return state?.players?.length || 4;
+}
+
+// Relative-position class per seat, viewer always anchored at the bottom.
+const SEAT_LAYOUTS = {
+  4: ["bottom", "left", "top", "right"],
+  6: ["bottom", "lower-left", "upper-left", "top", "upper-right", "lower-right"]
+};
+
+function seatLayout() {
+  return SEAT_LAYOUTS[tableSize()] || SEAT_LAYOUTS[4];
+}
+
 function relativeSeat(absoluteSeat) {
-  return (absoluteSeat - perspectiveSeat() + 4) % 4;
+  const size = tableSize();
+  return (absoluteSeat - perspectiveSeat() + size) % size;
 }
 
 function renderSeats() {
+  const size = tableSize();
+  const layout = seatLayout();
+  const table = $(".table");
+  if (table) table.dataset.players = String(size);
+  // Blank any seat slots this table doesn't use (e.g. 5–6 on a four-seat table).
+  for (let position = 0; position < 6; position += 1) {
+    const slot = $(`#seat-${position}`);
+    if (!slot) continue;
+    slot.hidden = position >= size;
+    if (position >= size) slot.innerHTML = "";
+  }
   const isNewDeal = Boolean(state.round) && (!previousState?.round || previousState.round.dealer !== state.round.dealer);
-  for (let absolute = 0; absolute < 4; absolute += 1) {
+  for (let absolute = 0; absolute < size; absolute += 1) {
     const position = relativeSeat(absolute);
     const player = state.players[absolute];
     const element = $(`#seat-${position}`);
@@ -997,7 +1031,8 @@ function renderSeats() {
     const pile = collected
       ? `<div class="captured-pile ${collectedChanged ? "new-capture" : ""}" title="${collected} won trick${collected === 1 ? "" : "s"}"><i></i><i></i><span>${collected}</span></div>`
       : "";
-    element.className = `seat seat-${["bottom", "left", "top", "right"][position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""} ${absolute === state.hostSeat ? "host-seat" : ""}`;
+    element.hidden = false;
+    element.className = `seat seat-${layout[position]} ${isTurn ? "active" : ""} ${player && !player.connected ? "offline" : ""} ${absolute === state.hostSeat ? "host-seat" : ""}`;
     const canAskSwitch = !isSpectator()
       && state.canTeamSwitch
       && player
@@ -1235,8 +1270,10 @@ function renderLobbySettings(host) {
   document.querySelector("#lobby-panel .settings-grid")?.classList.toggle("hidden", !isCourtPiece);
   document.querySelector("#lobby-panel .auction-setting")?.classList.toggle("hidden", !isCourtPiece);
   if (deckSelect) {
-    const deckSizes = state.options?.deckSizes || [state.settings.deckSize];
-    deckSelect.innerHTML = deckSizes.map((size) => `<option value="${size}" ${size === state.settings.deckSize ? "selected" : ""}>${size} cards · ${size / 4} each</option>`).join("");
+    const seats = state.settings?.playerCount || tableSize();
+    // A deck only makes sense if it divides evenly among the seats at this table.
+    const deckSizes = (state.options?.deckSizes || [state.settings.deckSize]).filter((size) => size % seats === 0);
+    deckSelect.innerHTML = deckSizes.map((size) => `<option value="${size}" ${size === state.settings.deckSize ? "selected" : ""}>${size} cards · ${size / seats} each</option>`).join("");
     deckSelect.disabled = !host;
     deckSelect.onchange = updateLobbySettings;
   }
@@ -1515,13 +1552,14 @@ function renderPanels() {
     : `Share the code and start a ${gameLabel(state.gameType)} table.`;
 
   if (!state.round && !isSpectator()) {
+    const seats = tableSize();
     const count = state.players.filter(Boolean).length;
     $("#start-button").classList.toggle("hidden", state.you.seat !== state.hostSeat);
-    $("#start-button").disabled = count !== 4;
+    $("#start-button").disabled = count !== seats;
     const botCount = state.players.filter((player) => player?.bot).length;
-    $("#lobby-note").textContent = `${count}/4 seats ready${botCount ? ` · ${botCount} bot${botCount > 1 ? "s" : ""}` : ""}${state.you.seat === state.hostSeat ? " — you are the host" : ""}`;
+    $("#lobby-note").textContent = `${count}/${seats} seats ready${botCount ? ` · ${botCount} bot${botCount > 1 ? "s" : ""}` : ""}${state.you.seat === state.hostSeat ? " — you are the host" : ""}`;
     const host = state.you.seat === state.hostSeat;
-    $("#fill-bots-button").classList.toggle("hidden", !host || count === 4);
+    $("#fill-bots-button").classList.toggle("hidden", !host || count === seats);
     renderLobbySettings(host && !state.settingsLocked);
   } else if (state.round && ["bidding", "auction_decision"].includes(state.round.phase)) {
     auction?.classList.remove("hidden");

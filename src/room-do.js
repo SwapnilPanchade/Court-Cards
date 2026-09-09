@@ -58,6 +58,14 @@ import {
 
 const ROOM_KEY = "room";
 
+// Cryptographically strong float in [0, 1) for shuffling. Fairer than Math.random
+// for a game that drives real-money settlements, and available in the Worker runtime.
+function cryptoRandom() {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return array[0] / 2 ** 32;
+}
+
 export class RoomDurableObject {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -130,7 +138,8 @@ export class RoomDurableObject {
       this.room = createEmptyRoom(code, host, {
         gameType: body.gameType,
         tableTheme: body.tableTheme,
-        auctionMode: body.auctionMode
+        auctionMode: body.auctionMode,
+        playerCount: body.playerCount
       });
       await this.saveRoom();
       await this.scheduleAfterStateChange();
@@ -320,7 +329,7 @@ export class RoomDurableObject {
   }
 
   createTrackedRound(room) {
-    const round = createRound(room.dealer, room.settings);
+    const round = createRound(room.dealer, room.settings, cryptoRandom);
     round.settlement = createRoundSettlement(room);
     return round;
   }
@@ -542,7 +551,7 @@ export class RoomDurableObject {
     const room = await this.loadRoom();
     if (!room) throw new Error("Join a room first.");
     if (session.seat !== room.hostSeat) throw new Error("Only the host can start.");
-    if (room.players.some((player) => !player)) throw new Error("Four players are required.");
+    if (room.players.some((player) => !player)) throw new Error(`All ${room.players.length} seats must be filled to start.`);
     assertApprovedHumanPlayers(room.players);
     if (room.round && room.round.phase !== "round_over") throw new Error("A round is already active.");
     room.round = this.createTrackedRound(room);
@@ -785,7 +794,7 @@ export class RoomDurableObject {
     if (!room?.round || room.round.phase !== "round_over") throw new Error("Finish the current round first.");
     if (session.seat !== room.hostSeat) throw new Error("Only the host can start the next round.");
     await this.flushPendingSettlements();
-    room.dealer = (room.dealer + 1) % 4;
+    room.dealer = (room.dealer + 1) % room.players.length;
     room.round = this.createTrackedRound(room);
     room.restartVote = null;
     room.teamSwitchRequest = null;
@@ -804,7 +813,7 @@ export class RoomDurableObject {
     room.players.forEach((player, index) => {
       if (player?.bot && !room.restartVote.approvals.includes(index)) room.restartVote.approvals.push(index);
     });
-    if (room.restartVote.approvals.length === 4) await this.applyRestart(room);
+    if (room.restartVote.approvals.length === room.players.length) await this.applyRestart(room);
     await this.saveRoom();
     this.broadcast();
     if (room.round && room.round.phase !== "round_over") await this.scheduleAfterStateChange();
@@ -822,7 +831,7 @@ export class RoomDurableObject {
       return {};
     }
     if (!room.restartVote.approvals.includes(session.seat)) room.restartVote.approvals.push(session.seat);
-    if (room.restartVote.approvals.length === 4) await this.applyRestart(room);
+    if (room.restartVote.approvals.length === room.players.length) await this.applyRestart(room);
     await this.saveRoom();
     this.broadcast();
     await this.scheduleAfterStateChange();
@@ -833,7 +842,7 @@ export class RoomDurableObject {
     // Fresh deal only — lifetime room scores are preserved.
     room.restartVote = null;
     room.teamSwitchRequest = null;
-    room.dealer = (room.dealer + 1) % 4;
+    room.dealer = (room.dealer + 1) % room.players.length;
     room.round = this.createTrackedRound(room);
     room.alarm = null;
     await this.ctx.storage.deleteAlarm();

@@ -2,6 +2,9 @@ import {
   SUITS,
   DECK_SIZES,
   MODES,
+  PLAYER_COUNTS,
+  DEFAULT_PLAYER_COUNT,
+  normalizePlayerCount,
   createRound as createCourtPieceRound,
   placeBid,
   passBid,
@@ -51,6 +54,7 @@ export const AVATAR_IDS = Object.freeze([
 export const DEFAULT_AVATAR_ID = AVATAR_IDS[0];
 export const DEFAULT_DECK_SIZE = 36;
 export const DEFAULT_MODE = "single";
+export { PLAYER_COUNTS, DEFAULT_PLAYER_COUNT };
 export const TURN_TIMEOUT_MS = 40_000;
 export const BOT_ACTION_DELAY_MS = 650;
 export const COLLECTION_MS = 1_600;
@@ -78,9 +82,9 @@ export function defaultAvatarForSeat(seat) {
 }
 
 export function makeBot(seat, randomUUID = () => crypto.randomUUID()) {
-  const titles = ["Ace", "Queen", "King", "Jack"];
+  const titles = ["Ace", "Queen", "King", "Jack", "Joker", "Baron"];
   return {
-    name: `${titles[seat]} Bot`,
+    name: `${titles[seat % titles.length]} Bot`,
     token: `bot-${randomUUID()}`,
     socketId: null,
     bot: true,
@@ -166,13 +170,16 @@ export function collectGameTrick(round) {
 
 export function createEmptyRoom(code, hostPlayer, options = {}) {
   const gameType = normalizeGameType(options.gameType);
+  // Only Court Piece supports a variable table size; the other games are 4-seat.
+  const playerCount = gameType === "court-piece" ? normalizePlayerCount(options.playerCount) : DEFAULT_PLAYER_COUNT;
+  const deckSize = gameType === "court-piece" && playerCount === 6 ? 48 : DEFAULT_DECK_SIZE;
   const room = {
     code,
     gameType,
-    players: [hostPlayer, null, null, null],
+    players: Array.from({ length: playerCount }, (_, seat) => (seat === 0 ? hostPlayer : null)),
     spectators: [],
     hostSeat: 0,
-    dealer: 3,
+    dealer: playerCount - 1,
     round: null,
     score: gameType === "court-piece" ? [0, 0] : [0, 0, 0, 0],
     matchTarget: null,
@@ -183,9 +190,10 @@ export function createEmptyRoom(code, hostPlayer, options = {}) {
     alarm: null,
     tableTheme: DEFAULT_TABLE_THEME,
     settings: {
-      deckSize: DEFAULT_DECK_SIZE,
+      deckSize,
       mode: DEFAULT_MODE,
       auctionMode: false,
+      playerCount,
       gameType
     },
     settingsLocked: false,
@@ -204,18 +212,50 @@ export function updateRoomSettings(room, seat, updates = {}) {
   if (seat !== room.hostSeat) throw new Error("Only the host can change settings.");
   if (room.round || room.settingsLocked) throw new Error("Settings cannot change after the game starts.");
 
-  const deckSize = updates.deckSize === undefined ? room.settings.deckSize : Number(updates.deckSize);
+  const currentPlayers = room.players.length;
+  const playerCount = updates.playerCount === undefined
+    ? normalizePlayerCount(room.settings.playerCount, currentPlayers)
+    : normalizePlayerCount(updates.playerCount, currentPlayers);
+  let deckSize = updates.deckSize === undefined ? room.settings.deckSize : Number(updates.deckSize);
   const mode = updates.mode === undefined ? room.settings.mode : updates.mode;
   const auctionMode = updates.auctionMode === undefined ? Boolean(room.settings.auctionMode) : updates.auctionMode;
   const tableTheme = updates.tableTheme === undefined ? (room.tableTheme || DEFAULT_TABLE_THEME) : updates.tableTheme;
 
   if (room.gameType && room.gameType !== "court-piece") return room;
-  if (!DECK_SIZES.includes(deckSize) || !MODES.includes(mode)) throw new Error("Choose valid game settings.");
+  if (!PLAYER_COUNTS.includes(playerCount)) throw new Error("Choose a valid table size.");
+  // A deck must divide evenly among the seats; nudge to the table default if not.
+  if (!DECK_SIZES.includes(deckSize) || deckSize % playerCount !== 0) {
+    deckSize = playerCount === 6 ? 48 : DEFAULT_DECK_SIZE;
+  }
+  if (!MODES.includes(mode)) throw new Error("Choose valid game settings.");
   if (typeof auctionMode !== "boolean") throw new Error("Auction mode must be on or off.");
   if (!TABLE_THEMES.includes(tableTheme)) throw new Error("Choose a valid table theme.");
 
-  room.settings = { deckSize, mode, auctionMode };
+  if (playerCount !== currentPlayers) resizeTable(room, playerCount);
+  room.settings = { deckSize, mode, auctionMode, playerCount, gameType: room.gameType };
   room.tableTheme = tableTheme;
+  return room;
+}
+
+// Grow or shrink the seat array in the lobby. Shrinking is only allowed when the
+// seats being removed are empty or bots — a seated human is never dropped.
+function resizeTable(room, playerCount) {
+  const current = room.players.length;
+  if (playerCount > current) {
+    for (let seat = current; seat < playerCount; seat += 1) room.players.push(null);
+  } else if (playerCount < current) {
+    for (let seat = playerCount; seat < current; seat += 1) {
+      if (room.players[seat] && !room.players[seat].bot) {
+        throw new Error("Seat a smaller table only when the extra seats are empty.");
+      }
+    }
+    room.players.length = playerCount;
+  }
+  if (room.hostSeat >= playerCount) room.hostSeat = 0;
+  room.dealer = playerCount - 1;
+  room.score = [0, 0];
+  room.teamSwitchRequest = null;
+  room.restartVote = null;
   return room;
 }
 
@@ -226,7 +266,7 @@ export function chooseRoomTeam(room, seat, requestedTeam) {
   const team = normalizeTeam(requestedTeam);
   if (teamForSeat(seat) === team) return seat;
 
-  const teamSeats = [0, 1, 2, 3].filter((candidate) => teamForSeat(candidate) === team);
+  const teamSeats = room.players.map((_, candidate) => candidate).filter((candidate) => teamForSeat(candidate) === team);
   const targetSeat = teamSeats.find((candidate) => !room.players[candidate])
     ?? teamSeats.find((candidate) => room.players[candidate]?.bot);
   if (targetSeat === undefined) throw new Error(`Team ${team ? "B" : "A"} is full.`);
@@ -275,7 +315,7 @@ export function requestTeamSwitch(room, fromSeat, targetSeat) {
   const from = room.players[fromSeat];
   const to = room.players[targetSeat];
   if (!from || from.bot) throw new Error("Only a seated player can request a team switch.");
-  if (!Number.isInteger(targetSeat) || targetSeat < 0 || targetSeat > 3) throw new Error("Choose a valid seat.");
+  if (!Number.isInteger(targetSeat) || targetSeat < 0 || targetSeat >= room.players.length) throw new Error("Choose a valid seat.");
   if (targetSeat === fromSeat) throw new Error("Pick a different seat.");
   if (!to || to.bot) throw new Error("You can only switch with another human player.");
   if (teamForSeat(fromSeat) === teamForSeat(targetSeat)) throw new Error("You are already on the same team.");
@@ -329,7 +369,7 @@ export function transferHost(room, fromSeat, targetSeat) {
 export function kickPlayer(room, hostSeat, targetSeat, { randomUUID = () => crypto.randomUUID() } = {}) {
   if (hostSeat !== room.hostSeat) throw new Error("Only the host can remove players.");
   const seat = Number(targetSeat);
-  if (!Number.isInteger(seat) || seat < 0 || seat > 3) throw new Error("Choose a valid player.");
+  if (!Number.isInteger(seat) || seat < 0 || seat >= room.players.length) throw new Error("Choose a valid player.");
   if (seat === hostSeat) throw new Error("Use Exit to leave your own table.");
   const target = room.players[seat];
   if (!target) throw new Error("That seat is already empty.");
@@ -430,7 +470,7 @@ export function joinAsPlayer(room, {
 
   if (replaceSeat !== undefined && replaceSeat !== null && replaceSeat !== "") {
     const target = Number(replaceSeat);
-    if (!Number.isInteger(target) || target < 0 || target > 3) throw new Error("Choose a valid bot seat.");
+    if (!Number.isInteger(target) || target < 0 || target >= room.players.length) throw new Error("Choose a valid bot seat.");
     if (!room.players[target]?.bot) throw new Error("That seat is not a bot.");
     room.players[target] = {
       name: playerName,
@@ -471,6 +511,7 @@ export function publicRoomInfo(room) {
   return {
     code: room.code,
     gameType: room.gameType,
+    playerCount: room.players.length,
     started: Boolean(room.round),
     settingsLocked: Boolean(room.settingsLocked || room.round),
     emptySeats: emptySeats(room),
@@ -547,9 +588,10 @@ export function roomView(room, viewer) {
       dealer: round.dealer,
       caller: round.caller,
       passedBy: round.passedBy,
-      canPass: isPlayer && !round.auctionMode && round.phase === "choosing_trump" && round.caller === viewerSeat && round.passedBy.length < 3,
+      canPass: isPlayer && !round.auctionMode && round.phase === "choosing_trump" && round.caller === viewerSeat && round.passedBy.length < room.players.length - 1,
       mode: round.mode,
       deckSize: round.deckSize,
+      playerCount: round.playerCount || room.players.length,
       auctionMode: round.auctionMode,
       bidState: round.bidState && {
         openingSeat: round.bidState.openingSeat,
@@ -599,7 +641,7 @@ export function roomView(room, viewer) {
     suits: SUITS,
     settings: room.settings,
     settingsLocked: Boolean(room.settingsLocked || room.round),
-    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS, playerNames: PLAYER_NAMES }
+    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, playerCounts: PLAYER_COUNTS, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS, playerNames: PLAYER_NAMES }
   };
 }
 

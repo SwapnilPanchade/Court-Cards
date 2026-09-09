@@ -65,6 +65,20 @@
             </div>
           </fieldset>
 
+          <fieldset class="table-size-selector" aria-labelledby="table-size-title">
+            <legend id="table-size-title">Table size</legend>
+            <div class="table-size-grid">
+              <input class="visually-hidden" type="radio" name="create-player-count" id="players-4" value="4" checked />
+              <label class="table-size-card" for="players-4">
+                <strong>4 players</strong><small>2 teams of 2 · 36 cards</small>
+              </label>
+              <input class="visually-hidden" type="radio" name="create-player-count" id="players-6" value="6" />
+              <label class="table-size-card" for="players-6">
+                <strong>6 players</strong><small>2 teams of 3 · 48 cards</small>
+              </label>
+            </div>
+          </fieldset>
+
           <label for="name">Your name</label>
           <select id="name" autocomplete="name">
             <option value="">Choose your name</option>
@@ -322,6 +336,8 @@
             <div id="seat-1" class="seat seat-left"></div>
             <div id="seat-3" class="seat seat-right"></div>
             <div id="seat-0" class="seat seat-bottom"></div>
+            <div id="seat-4" class="seat" hidden></div>
+            <div id="seat-5" class="seat" hidden></div>
             <div id="trick" class="trick"></div>
           </div>
         </div>

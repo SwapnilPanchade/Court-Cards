@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick } from "../src/game.js";
+import { createDeck, canPlayCard, winningPlay, createRound, placeBid, passBid, decideAuction, chooseTrump, chooseHiddenTrump, passTrump, revealTrump, playCard, collectTrick, teamForSeat, normalizePlayerCount } from "../src/game.js";
 import { TABLE_THEMES, AVATAR_IDS, roomView, updateRoomSettings, chooseRoomTeam, chooseRoomAvatar, recordRoundResult, assertMatchOpen } from "../src/room-logic.js";
 
 const card = (rank, suit, value) => ({ id: `${rank}-${suit}`, rank, suit, value });
@@ -18,6 +18,68 @@ test("36-card deck runs from six through ace and deals nine each", () => {
   assert.equal(deck.filter((item) => item.rank === "6").length, 4);
   const round = createRound(3, { deckSize: 36, mode: "single" }, () => 0.5);
   assert.deepEqual(round.hands.map((hand) => hand.length), [9, 9, 9, 9]);
+});
+
+test("six-player table deals a 48-card deck into eight cards each", () => {
+  const round = createRound(3, { playerCount: 6, deckSize: 48, mode: "single" }, () => 0.5);
+  assert.equal(round.playerCount, 6);
+  assert.equal(round.deckSize, 48);
+  assert.equal(round.cardsPerPlayer, 8);
+  assert.deepEqual(round.hands.map((hand) => hand.length), [8, 8, 8, 8, 8, 8]);
+  assert.deepEqual(round.collectedBySeat, [0, 0, 0, 0, 0, 0]);
+  assert.equal(round.caller, 4); // (dealer 3 + 1) % 6
+});
+
+test("six players default to a 48-card deck and reject decks that don't divide by six", () => {
+  assert.equal(createRound(3, { playerCount: 6 }, () => 0.5).deckSize, 48);
+  // 52 does not divide evenly by six → fall back to 48.
+  assert.equal(createRound(3, { playerCount: 6, deckSize: 52 }, () => 0.5).deckSize, 48);
+  // 36 (six each) and 24 (four each) divide by six and are honoured.
+  assert.equal(createRound(3, { playerCount: 6, deckSize: 36 }, () => 0.5).deckSize, 36);
+  assert.equal(createRound(3, { playerCount: 6, deckSize: 24 }, () => 0.5).deckSize, 24);
+});
+
+test("two teams of three alternate around a six seat table", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(teamForSeat), [0, 1, 0, 1, 0, 1]);
+  assert.equal(normalizePlayerCount(6), 6);
+  assert.equal(normalizePlayerCount(5), 4); // unsupported → default
+  assert.equal(normalizePlayerCount(undefined), 4);
+});
+
+test("a six-card trick completes and the winner leads next", () => {
+  const round = {
+    phase: "playing", playerCount: 6, mode: "single", cardsPerPlayer: 1, trump: "spades",
+    trumpRevealed: true, trumpEffectiveFrom: 0, mustTrumpSeat: null, turn: 0, trick: [],
+    completedTricks: [], tricks: [0, 0], collectedBySeat: [0, 0, 0, 0, 0, 0], pendingWinner: null,
+    hands: [
+      [card("A", "hearts", 12)], [card("2", "hearts", 0)], [card("K", "hearts", 11)],
+      [card("3", "spades", 1)], [card("Q", "hearts", 10)], [card("4", "hearts", 2)]
+    ]
+  };
+  playCard(round, 0, "A-hearts");
+  playCard(round, 1, "2-hearts");
+  playCard(round, 2, "K-hearts");
+  playCard(round, 3, "3-spades"); // trump
+  playCard(round, 4, "Q-hearts");
+  playCard(round, 5, "4-hearts");
+  assert.equal(round.phase, "trick_complete");
+  assert.equal(round.trick.length, 6);
+  collectTrick(round);
+  assert.equal(round.pendingWinner ?? round.turn, 3); // seat 3 trumped in
+  assert.equal(round.turn, 3);
+  assert.equal(round.tricks[teamForSeat(3)], 1);
+});
+
+test("with six players the caller may pass five times but the sixth must choose", () => {
+  const round = createRound(3, { playerCount: 6 }, () => 0.5);
+  assert.equal(round.caller, 4);
+  passTrump(round, 4);
+  passTrump(round, 5);
+  passTrump(round, 0);
+  passTrump(round, 1);
+  passTrump(round, 2);
+  assert.equal(round.caller, 3);
+  assert.throws(() => passTrump(round, 3));
 });
 
 test("player must follow the led suit when possible", () => {

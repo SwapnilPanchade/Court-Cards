@@ -39,9 +39,12 @@ export function createRoundSettlement(room, randomUUID = () => crypto.randomUUID
     if (!player || player.bot) return null;
     return canonicalRosterName(player.name);
   });
+  // Eligible when every seat holds a distinct approved human. Court Piece tables
+  // are 4 (2v2) or 6 (3v3); both settle at ₹5 per player.
   const eligible = room.gameType === "court-piece"
     && players.every(Boolean)
-    && new Set(players).size === 4;
+    && new Set(players).size === players.length
+    && (players.length === 4 || players.length === 6);
 
   return {
     id: `${room.code}:${randomUUID()}`,
@@ -63,8 +66,9 @@ export function settlementEntryForRound(room, round, recordedAt = Date.now()) {
     recordedAt,
     stakePaise: STAKE_PAISE,
     winnerTeam: round.winner,
-    teamA: [players[0], players[2]],
-    teamB: [players[1], players[3]]
+    // Teams alternate by seat parity: A = even seats, B = odd seats.
+    teamA: players.filter((_, seat) => seat % 2 === 0),
+    teamB: players.filter((_, seat) => seat % 2 === 1)
   });
 }
 
@@ -82,8 +86,10 @@ export function normalizeSettlementEntry(entry) {
   if (!Number.isSafeInteger(recordedAt) || recordedAt <= 0) throw new Error("Settlement time is invalid.");
   if (stakePaise !== STAKE_PAISE) throw new Error("Settlement stake must be ₹5 per player.");
   if (winnerTeam !== 0 && winnerTeam !== 1) throw new Error("Settlement winner is invalid.");
-  if (teamA.length !== 2 || teamB.length !== 2 || new Set(allPlayers).size !== 4) {
-    throw new Error("A settlement needs four different approved players.");
+  if (teamA.length !== teamB.length
+    || (teamA.length !== 2 && teamA.length !== 3)
+    || new Set(allPlayers).size !== allPlayers.length) {
+    throw new Error("A settlement needs equal teams of two or three different approved players.");
   }
 
   return { id, roomCode, recordedAt, stakePaise, winnerTeam, teamA, teamB };

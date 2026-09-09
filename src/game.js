@@ -2,6 +2,16 @@ const SUITS = ["clubs", "diamonds", "hearts", "spades"];
 const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
 const MODES = ["single", "double", "hidden"];
 const DECK_SIZES = [52, 48, 44, 40, 36, 32, 28, 24, 20];
+const PLAYER_COUNTS = [4, 6];
+const DEFAULT_PLAYER_COUNT = 4;
+// Default deck for each supported table size: full-ish hands that divide evenly.
+// 4 players → 36 (9 each); 6 players → 48 (8 each). 52 never divides by 6.
+const DEFAULT_DECK_FOR_PLAYERS = { 4: 36, 6: 48 };
+
+function normalizePlayerCount(value, fallback = DEFAULT_PLAYER_COUNT) {
+  const count = Number(value);
+  return PLAYER_COUNTS.includes(count) ? count : fallback;
+}
 
 function createDeck(deckSize = 52) {
   if (!DECK_SIZES.includes(deckSize)) throw new Error("Deck size must be 20–52 cards in steps of four.");
@@ -20,9 +30,10 @@ function shuffle(deck, random = Math.random) {
   return copy;
 }
 
-function dealHands(deck) {
-  const hands = [[], [], [], []];
-  deck.forEach((card, index) => hands[index % 4].push(card));
+function dealHands(deck, playerCount = DEFAULT_PLAYER_COUNT) {
+  const seats = normalizePlayerCount(playerCount);
+  const hands = Array.from({ length: seats }, () => []);
+  deck.forEach((card, index) => hands[index % seats].push(card));
   return hands;
 }
 
@@ -52,15 +63,21 @@ function winningPlay(plays, trump, trumpEffectiveFrom = 0) {
 }
 
 function createRound(dealer, settings = {}, random = Math.random) {
-  const deckSize = DECK_SIZES.includes(settings.deckSize) ? settings.deckSize : 52;
+  const playerCount = normalizePlayerCount(settings.playerCount);
+  const fallbackDeck = DEFAULT_DECK_FOR_PLAYERS[playerCount] || 52;
+  const requestedDeck = DECK_SIZES.includes(settings.deckSize) ? settings.deckSize : fallbackDeck;
+  // A deck must divide evenly among the seats; otherwise fall back to the
+  // table's default (36 for four, 48 for six).
+  const deckSize = requestedDeck % playerCount === 0 ? requestedDeck : fallbackDeck;
   const mode = MODES.includes(settings.mode) ? settings.mode : "single";
   const auctionMode = settings.auctionMode === true;
-  const caller = (dealer + 1) % 4;
-  const cardsPerPlayer = deckSize / 4;
+  const caller = (dealer + 1) % playerCount;
+  const cardsPerPlayer = deckSize / playerCount;
   return {
     phase: auctionMode ? "bidding" : "choosing_trump",
     dealer,
     caller,
+    playerCount,
     mode,
     deckSize,
     cardsPerPlayer,
@@ -88,19 +105,25 @@ function createRound(dealer, settings = {}, random = Math.random) {
     trumpRevealed: mode !== "hidden",
     trumpEffectiveFrom: 0,
     mustTrumpSeat: null,
-    hands: dealHands(shuffle(createDeck(deckSize), random)),
+    hands: dealHands(shuffle(createDeck(deckSize), random), playerCount),
     turn: caller,
     trick: [],
     completedTricks: [],
     tricks: [0, 0],
     // Per-seat raw trick wins for the table piles. Team totals live in `tricks`.
-    collectedBySeat: [0, 0, 0, 0],
+    collectedBySeat: Array.from({ length: playerCount }, () => 0),
     passedBy: [],
     pendingWinner: null,
     winner: null,
     court: false,
     resultRecorded: false
   };
+}
+
+// Resolve the seat count from a round, tolerating older round objects (and
+// rooms persisted before playerCount existed) by falling back to the hands.
+function seatCount(round) {
+  return round.playerCount || (Array.isArray(round.hands) ? round.hands.length : DEFAULT_PLAYER_COUNT);
 }
 
 function assertBiddingTurn(round, seat) {
@@ -113,8 +136,8 @@ function finishAuctionAction(round, seat) {
   const bidState = round.bidState;
   bidState.actedSeats.push(seat);
 
-  if (bidState.actedSeats.length < 4) {
-    bidState.turn = (seat + 1) % 4;
+  if (bidState.actedSeats.length < seatCount(round)) {
+    bidState.turn = (seat + 1) % seatCount(round);
     round.turn = bidState.turn;
     return round;
   }
@@ -200,9 +223,9 @@ function passTrump(round, seat) {
   if (round.phase !== "choosing_trump") throw new Error("Hukum has already been chosen.");
   if (round.auctionMode) throw new Error("The auction winner must choose hukum.");
   if (seat !== round.caller) throw new Error("Only the current hukum caller can pass.");
-  if (round.passedBy.length >= 3) throw new Error("Last caller must choose hukum.");
+  if (round.passedBy.length >= seatCount(round) - 1) throw new Error("Last caller must choose hukum.");
   round.passedBy.push(seat);
-  round.caller = (seat + 1) % 4;
+  round.caller = (seat + 1) % seatCount(round);
   round.turn = round.caller;
 }
 
@@ -251,9 +274,9 @@ function playCard(round, seat, cardId) {
   round.hands[seat] = hand.filter((item) => item.id !== cardId);
   round.trick.push({ seat, card });
   round.mustTrumpSeat = null;
-  round.turn = (seat + 1) % 4;
+  round.turn = (seat + 1) % seatCount(round);
 
-  if (round.trick.length === 4) {
+  if (round.trick.length === seatCount(round)) {
     const effectiveTrump = round.mode === "hidden" && !round.trumpRevealed ? null : round.trump;
     const winner = winningPlay(round.trick, effectiveTrump, round.trumpEffectiveFrom);
     round.pendingWinner = winner.seat;
@@ -265,7 +288,7 @@ function playCard(round, seat, cardId) {
 }
 
 function collectTrick(round) {
-  if (round.phase !== "trick_complete" || round.trick.length !== 4) throw new Error("No completed trick to collect.");
+  if (round.phase !== "trick_complete" || round.trick.length !== seatCount(round)) throw new Error("No completed trick to collect.");
   const winnerSeat = round.pendingWinner;
   const winner = round.trick.find((play) => play.seat === winnerSeat);
   if (!winner) throw new Error("Trick winner is missing.");
@@ -304,6 +327,10 @@ export {
   RANKS,
   MODES,
   DECK_SIZES,
+  PLAYER_COUNTS,
+  DEFAULT_PLAYER_COUNT,
+  DEFAULT_DECK_FOR_PLAYERS,
+  normalizePlayerCount,
   createDeck,
   shuffle,
   dealHands,

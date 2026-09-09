@@ -614,6 +614,13 @@ button:active:not(:disabled) { transform: translateY(2px); }
 .seat-bottom { left: 50%; bottom: 7px; transform: translateX(-50%); }
 .seat-left { left: 2.5%; top: 50%; transform: translateY(-50%); }
 .seat-right { right: 2.5%; top: 50%; transform: translateY(-50%); }
+/* Six-seat table: two players down each long side plus top & bottom centre. */
+.seat-upper-left { left: 4%; top: 20%; transform: none; }
+.seat-lower-left { left: 4%; bottom: 16%; transform: none; }
+.seat-upper-right { right: 4%; top: 20%; transform: none; }
+.seat-lower-right { right: 4%; bottom: 16%; transform: none; }
+.table[data-players="6"] .seat-top { top: 5px; }
+.table[data-players="6"] .seat-bottom { bottom: 4px; }
 .avatar { position: relative; width: 40px; height: 40px; display: grid; place-items: center; margin: 0 auto 3px; overflow: hidden; border: 2px solid var(--line); border-radius: 50%; color: var(--ink); background: linear-gradient(145deg, var(--surface-2), var(--surface-solid)); box-shadow: 0 4px 0 rgba(0, 0, 0, .32), 0 9px 17px rgba(0, 0, 0, .28); font-size: 13px; font-weight: 900; transition: border-color .2s, box-shadow .2s, transform .2s; }
 .avatar::before { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background-image: var(--avatar-image); background-position: center; background-repeat: no-repeat; background-size: cover; }
 .avatar-fallback { position: relative; z-index: 0; }
@@ -656,6 +663,13 @@ button:active:not(:disabled) { transform: translateY(2px); }
 .played-card[data-seat="2"] { left: 50%; top: 32%; animation: dropFromTop .32s ease-out both; }
 .played-card[data-seat="1"] { left: 38%; top: 50%; animation: dropFromLeft .32s ease-out both; }
 .played-card[data-seat="3"] { left: 62%; top: 50%; animation: dropFromRight .32s ease-out both; }
+/* Six-seat trick: cards land in a hexagon matching each relative seat. */
+.table[data-players="6"] .played-card[data-seat="0"] { left: 50%; top: 70%; animation: dropFromBottom .32s ease-out both; }
+.table[data-players="6"] .played-card[data-seat="1"] { left: 31%; top: 63%; animation: dropFromLeft .32s ease-out both; }
+.table[data-players="6"] .played-card[data-seat="2"] { left: 31%; top: 37%; animation: dropFromLeft .32s ease-out both; }
+.table[data-players="6"] .played-card[data-seat="3"] { left: 50%; top: 30%; animation: dropFromTop .32s ease-out both; }
+.table[data-players="6"] .played-card[data-seat="4"] { left: 69%; top: 37%; animation: dropFromRight .32s ease-out both; }
+.table[data-players="6"] .played-card[data-seat="5"] { left: 69%; top: 63%; animation: dropFromRight .32s ease-out both; }
 
 /* Crisp DOM cards remain identical across illustrated themes. */
 .hand-label { width: min(100%, 960px); flex: 0 0 auto; margin: 0 auto -1px; padding-left: 5px; color: var(--muted); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; }
@@ -1479,6 +1493,22 @@ body {
 }
 .game-selector input:checked + .game-mode-card-judgment { border-color: var(--platform-pink); background: linear-gradient(110deg, rgba(255,91,214,.13), rgba(255,255,255,.055)); box-shadow: 0 0 0 1px rgba(255,91,214,.18), 0 18px 32px rgba(0,0,0,.18); }
 .game-selector input:checked + .game-mode-card-rummy { border-color: var(--platform-cyan); background: linear-gradient(110deg, rgba(103,247,229,.13), rgba(255,255,255,.055)); box-shadow: 0 0 0 1px rgba(103,247,229,.18), 0 18px 32px rgba(0,0,0,.18); }
+
+/* Table-size picker — Court Piece only (hidden for Judgment/Rummy). */
+.table-size-selector { margin: 0 0 14px; padding: 0; border: 0; }
+body[data-game-type="judgment"] .table-size-selector,
+body[data-game-type="rummy"] .table-size-selector { display: none; }
+.table-size-selector legend { margin-bottom: 8px; padding: 0; color: var(--platform-muted); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.table-size-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.table-size-card { display: block; padding: 11px 13px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; background: rgba(255,255,255,.03); cursor: pointer; transition: transform .18s, border-color .18s, background .18s; }
+.table-size-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.28); }
+.table-size-card strong { display: block; font-size: 13px; letter-spacing: -.01em; }
+.table-size-card small { display: block; margin-top: 3px; color: var(--platform-muted); font-size: 10px; }
+.table-size-selector input:checked + .table-size-card {
+  border-color: var(--platform-yellow);
+  background: linear-gradient(110deg, rgba(255,209,102,.13), rgba(255,255,255,.055));
+  box-shadow: 0 0 0 1px rgba(255,209,102,.18), 0 14px 26px rgba(0,0,0,.18);
+}
 
 .game-name {
   margin-bottom: 4px;
