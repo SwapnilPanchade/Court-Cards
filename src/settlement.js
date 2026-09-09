@@ -10,7 +10,20 @@ export const PLAYER_NAMES = Object.freeze([
   "Nishant"
 ]);
 
-export const STAKE_PAISE = 500;
+export const STAKE_PAISE = 500; // Default ₹5 per player.
+export const MIN_STAKE_PAISE = 100; // ₹1
+export const MAX_STAKE_PAISE = 1_000_000; // ₹10,000
+
+// A per-player stake is any whole rupee amount within the allowed range.
+// Falls back to the ₹5 default when the value is missing or invalid.
+export function normalizeStakePaise(value, fallback = STAKE_PAISE) {
+  const paise = Math.round(Number(value));
+  if (!Number.isSafeInteger(paise) || paise < MIN_STAKE_PAISE || paise > MAX_STAKE_PAISE || paise % 100 !== 0) {
+    if (value === undefined || value === null || value === "") return fallback;
+    throw new Error("Stake must be a whole rupee amount between ₹1 and ₹10,000.");
+  }
+  return paise;
+}
 
 const PLAYER_BY_KEY = new Map(PLAYER_NAMES.map((name) => [name.toLowerCase(), name]));
 
@@ -39,9 +52,11 @@ export function createRoundSettlement(room, randomUUID = () => crypto.randomUUID
     if (!player || player.bot) return null;
     return canonicalRosterName(player.name);
   });
-  // Eligible when every seat holds a distinct approved human. Court Piece tables
-  // are 4 (2v2) or 6 (3v3); both settle at ₹5 per player.
+  // Eligible when money tracking is on and every seat holds a distinct approved
+  // human. Court Piece tables are 4 (2v2) or 6 (3v3).
+  const moneyEnabled = room.settings?.moneyEnabled !== false;
   const eligible = room.gameType === "court-piece"
+    && moneyEnabled
     && players.every(Boolean)
     && new Set(players).size === players.length
     && (players.length === 4 || players.length === 6);
@@ -49,6 +64,8 @@ export function createRoundSettlement(room, randomUUID = () => crypto.randomUUID
   return {
     id: `${room.code}:${randomUUID()}`,
     eligible,
+    // Snapshot the room's stake so later stake changes never rewrite past games.
+    stakePaise: normalizeStakePaise(room.settings?.stakePaise),
     players
   };
 }
@@ -64,7 +81,7 @@ export function settlementEntryForRound(room, round, recordedAt = Date.now()) {
     id: round.settlement.id,
     roomCode: room.code,
     recordedAt,
-    stakePaise: STAKE_PAISE,
+    stakePaise: normalizeStakePaise(round.settlement.stakePaise),
     winnerTeam: round.winner,
     // Teams alternate by seat parity: A = even seats, B = odd seats.
     teamA: players.filter((_, seat) => seat % 2 === 0),
@@ -84,7 +101,8 @@ export function normalizeSettlementEntry(entry) {
 
   if (!id || !roomCode) throw new Error("Settlement identity is missing.");
   if (!Number.isSafeInteger(recordedAt) || recordedAt <= 0) throw new Error("Settlement time is invalid.");
-  if (stakePaise !== STAKE_PAISE) throw new Error("Settlement stake must be ₹5 per player.");
+  const normalizedStake = normalizeStakePaise(stakePaise, null);
+  if (normalizedStake === null) throw new Error("Settlement stake is invalid.");
   if (winnerTeam !== 0 && winnerTeam !== 1) throw new Error("Settlement winner is invalid.");
   if (teamA.length !== teamB.length
     || (teamA.length !== 2 && teamA.length !== 3)
@@ -92,7 +110,7 @@ export function normalizeSettlementEntry(entry) {
     throw new Error("A settlement needs equal teams of two or three different approved players.");
   }
 
-  return { id, roomCode, recordedAt, stakePaise, winnerTeam, teamA, teamB };
+  return { id, roomCode, recordedAt, stakePaise: normalizedStake, winnerTeam, teamA, teamB };
 }
 
 export function calculateBalances(games, roster = PLAYER_NAMES) {

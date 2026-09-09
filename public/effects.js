@@ -82,7 +82,7 @@
       round: "ATELIER WON",
       court: "COURT CRAFTED",
       match: "MASTER OF THE TABLE",
-      symbols: { card: "PLAY", cut: "CUT", trick: "WIN", round: "HAND", court: "COURT", match: "MATCH" }
+      symbols: { card: "♠", cut: "⚔", trick: "★", round: "♛", court: "👑", match: "🏆" }
     }
   };
 
@@ -430,9 +430,12 @@
   }
 
   function createAtelierCutScene(effect, payload, origin) {
-    if (currentTheme() !== "atelier" || state.reducedMotion || !payload?.aceCut) return null;
-    const aceLeft = cloneAtelierCard(payload.aceElement, "atelier-ace-fragment atelier-ace-fragment--left");
-    const aceRight = cloneAtelierCard(payload.aceElement, "atelier-ace-fragment atelier-ace-fragment--right");
+    // Play the slice for EVERY trump cut, using whatever card was actually beaten.
+    // Aces get an extra flourish via the .is-ace class.
+    const cutSource = payload?.cutElement || payload?.aceElement;
+    if (currentTheme() !== "atelier" || state.reducedMotion || !cutSource) return null;
+    const aceLeft = cloneAtelierCard(cutSource, "atelier-ace-fragment atelier-ace-fragment--left");
+    const aceRight = cloneAtelierCard(cutSource, "atelier-ace-fragment atelier-ace-fragment--right");
     const hukum = cloneAtelierCard(payload.element, "atelier-hukum-rise");
     if (!aceLeft || !aceRight || !hukum) return null;
 
@@ -443,7 +446,7 @@
     const hukumX = hukum.rect.left + hukum.rect.width / 2 - anchorX;
     const hukumY = hukum.rect.top + hukum.rect.height / 2 - anchorY;
     const scene = document.createElement("div");
-    scene.className = "atelier-cut-scene";
+    scene.className = "atelier-cut-scene" + (payload.aceCut ? " is-ace" : "");
     scene.style.setProperty("--atelier-ace-x", aceX + "px");
     scene.style.setProperty("--atelier-ace-y", aceY + "px");
     scene.style.setProperty("--atelier-hukum-x", hukumX + "px");
@@ -458,7 +461,7 @@
     scene.appendChild(cutLine);
     effect.appendChild(scene);
 
-    const hiddenSources = [payload.aceElement, payload.element]
+    const hiddenSources = [cutSource, payload.element]
       .filter(Boolean)
       .map((element) => ({ element, opacity: element.style.opacity }));
     hiddenSources.forEach(({ element }) => { element.style.opacity = "0"; });
@@ -563,7 +566,7 @@
       }
     }
 
-    const atelierScene = themeName === "atelier" && type === "trump-cut" && payload?.aceCut
+    const atelierScene = themeName === "atelier" && type === "trump-cut" && (payload?.cutElement || payload?.aceElement)
       ? createAtelierCutScene(effect, payload, origin)
       : null;
 
@@ -884,18 +887,42 @@
     const team = normalizeTeam(payload?.team).toUpperCase();
     const teamLabel = `TEAM ${team}`;
     if (type === "card") return { title: theme.card, subtitle: "", symbol: theme.symbols.card };
-    if (type === "trump-cut") return {
-      title: payload?.aceCut ? theme.aceCut : theme.cut,
-      subtitle: payload?.aceCut ? "ACE CUT WITH HUKUM" : "TRUMP TAKES THE TRICK",
-      symbol: theme.symbols.cut
-    };
+    if (type === "trump-cut") {
+      const suitGlyphs = { clubs: "♣", diamonds: "♦", hearts: "♥", spades: "♠" };
+      const cut = payload?.cutCard;
+      const cutLabel = cut ? `${cut.rank}${suitGlyphs[cut.suit] || ""}` : null;
+      return {
+        title: payload?.aceCut ? theme.aceCut : (cutLabel ? `${cutLabel} KAAT!` : theme.cut),
+        subtitle: payload?.aceCut
+          ? "EKKA CUT WITH HUKUM"
+          : cutLabel ? `${cutLabel} trumped by TEAM ${team}` : "TRUMP TAKES THE TRICK",
+        symbol: theme.symbols.cut
+      };
+    }
     const winCopy = (outcome, symbol) => ({
       title: celebration?.title || outcome,
       subtitle: `${teamLabel} · ${outcome}`,
       symbol: celebration?.symbol || symbol
     });
     if (type === "trick-win") return winCopy(theme.trick, theme.symbols.trick);
-    if (type === "court-win") return winCopy(theme.court, theme.symbols.court);
+    if (type === "court-win") {
+      // A court (kot) is a clean sweep — rub it in for the team that took zero.
+      const loser = normalizeTeam(payload?.team) === "b" ? "A" : "B";
+      const burns = [
+        `TEAM ${loser} GOT WHITEWASHED 🧺`,
+        `TEAM ${loser}: 0 HAATH. GHAR JAO 🚪`,
+        `TEAM ${loser} WASHED CLEAN 🧹`,
+        `NOT ONE TRICK, TEAM ${loser} 💀`,
+        `TEAM ${loser} PACKED THEIR BAGS 🧳`,
+        `KOT! TEAM ${loser} HUMBLED 😭`
+      ];
+      const burn = burns[Math.floor(Math.random() * burns.length)];
+      return {
+        title: celebration?.title || theme.court,
+        subtitle: burn,
+        symbol: celebration?.symbol || theme.symbols.court
+      };
+    }
     if (type === "round-win") return winCopy(theme.round, theme.symbols.round);
     return winCopy(theme.match, theme.symbols.match);
   }
@@ -968,7 +995,9 @@
   }
 
   function onTrumpCut(payload = {}) {
-    const duration = currentTheme() === "atelier" && payload.aceCut ? 1850 : 1250;
+    // In Atelier every cut gets the slice scene; give the animation room to land.
+    const hasSlice = Boolean(payload.cutElement || payload.aceElement);
+    const duration = currentTheme() === "atelier" && hasSlice ? 1850 : 1250;
     return runEvent("trump-cut", payload, { duration, audio: payload.aceCut ? "ace" : "cut", priority: 2 });
   }
 

@@ -67,6 +67,35 @@ test("a six-player table settles as two teams of three at ₹5 per player", () =
   assert.equal(summary.balances.reduce((sum, item) => sum + item.amountPaise, 0), 0);
 });
 
+test("stake is configurable per room and snapshotted into each entry", () => {
+  const room = {
+    code: "STK12",
+    gameType: "court-piece",
+    settings: { stakePaise: 2000, moneyEnabled: true },
+    players: [player("Swapnil"), player("Ajit"), player("Pradeep"), player("Ajay")]
+  };
+  const settlement = createRoundSettlement(room, () => "stk-1");
+  assert.equal(settlement.eligible, true);
+  assert.equal(settlement.stakePaise, 2000);
+  const entry = settlementEntryForRound(room, { phase: "round_over", winner: 0, settlement }, 1_000);
+  assert.equal(entry.stakePaise, 2000); // ₹20, not the ₹5 default
+  const balances = Object.fromEntries(summarizeSettlement([entry]).balances.map((i) => [i.name, i.amountPaise]));
+  assert.equal(balances.Swapnil, 2000);
+  assert.equal(balances.Ajit, -2000);
+});
+
+test("money can be turned off entirely for a room", () => {
+  const room = {
+    code: "OFF12",
+    gameType: "court-piece",
+    settings: { stakePaise: 500, moneyEnabled: false },
+    players: [player("Swapnil"), player("Ajit"), player("Pradeep"), player("Ajay")]
+  };
+  const settlement = createRoundSettlement(room, () => "off-1");
+  assert.equal(settlement.eligible, false);
+  assert.equal(settlementEntryForRound(room, { phase: "round_over", winner: 0, settlement }), null);
+});
+
 test("bot rounds and non-Court-Piece rounds do not affect money", () => {
   const botRoom = {
     code: "BOT12",

@@ -185,6 +185,18 @@
             <i aria-hidden="true"></i>
           </label>
 
+          <div class="money-setting" id="create-money-setting">
+            <label class="auction-setting" for="create-money-enabled">
+              <input id="create-money-enabled" type="checkbox" checked />
+              <span><strong>Track money</strong><small>Settle up later · totally optional</small></span>
+              <i aria-hidden="true"></i>
+            </label>
+            <label class="stake-input" for="create-stake">
+              <span>Stake per player, per hand</span>
+              <span class="stake-field"><b>₹</b><input id="create-stake" type="number" min="1" max="10000" step="1" value="5" inputmode="numeric" /></span>
+            </label>
+          </div>
+
           <button id="create-button" class="primary create-button">Create a private table <span aria-hidden="true">→</span></button>
           <p id="home-error" class="error" role="alert"></p>
           <p class="fine-print">No account · share one code · landscape recommended</p>
@@ -373,6 +385,18 @@
               </span>
               <i aria-hidden="true"></i>
             </label>
+
+            <div class="money-setting" id="lobby-money-setting">
+              <label class="auction-setting" for="money-enabled">
+                <input id="money-enabled" type="checkbox" checked />
+                <span><strong>Track money</strong><small>Settle up later · totally optional</small></span>
+                <i aria-hidden="true"></i>
+              </label>
+              <label class="stake-input" for="lobby-stake">
+                <span>Stake per player, per hand</span>
+                <span class="stake-field"><b>₹</b><input id="lobby-stake" type="number" min="1" max="10000" step="1" value="5" inputmode="numeric" /></span>
+              </label>
+            </div>
 
             <fieldset class="theme-picker theme-picker-lobby">
               <legend>Table style</legend>

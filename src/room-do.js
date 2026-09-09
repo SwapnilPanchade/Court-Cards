@@ -139,7 +139,9 @@ export class RoomDurableObject {
         gameType: body.gameType,
         tableTheme: body.tableTheme,
         auctionMode: body.auctionMode,
-        playerCount: body.playerCount
+        playerCount: body.playerCount,
+        stakePaise: body.stakePaise,
+        moneyEnabled: body.moneyEnabled
       });
       await this.saveRoom();
       await this.scheduleAfterStateChange();

@@ -33,7 +33,7 @@ import {
   botRummyDrawSource,
   botRummyDiscard
 } from "./rummy.js";
-import { PLAYER_NAMES, canonicalRosterName, normalizeRosterName } from "./settlement.js";
+import { PLAYER_NAMES, STAKE_PAISE, canonicalRosterName, normalizeRosterName, normalizeStakePaise } from "./settlement.js";
 
 export const TABLE_THEMES = ["noir", "comic", "neon", "adda", "gully", "atelier"];
 export const GAME_TYPES = ["court-piece", "judgment", "rummy"];
@@ -194,6 +194,8 @@ export function createEmptyRoom(code, hostPlayer, options = {}) {
       mode: DEFAULT_MODE,
       auctionMode: false,
       playerCount,
+      stakePaise: normalizeStakePaise(options.stakePaise),
+      moneyEnabled: options.moneyEnabled === undefined ? true : Boolean(options.moneyEnabled),
       gameType
     },
     settingsLocked: false,
@@ -220,6 +222,12 @@ export function updateRoomSettings(room, seat, updates = {}) {
   const mode = updates.mode === undefined ? room.settings.mode : updates.mode;
   const auctionMode = updates.auctionMode === undefined ? Boolean(room.settings.auctionMode) : updates.auctionMode;
   const tableTheme = updates.tableTheme === undefined ? (room.tableTheme || DEFAULT_TABLE_THEME) : updates.tableTheme;
+  const stakePaise = updates.stakePaise === undefined
+    ? normalizeStakePaise(room.settings.stakePaise)
+    : normalizeStakePaise(updates.stakePaise);
+  const moneyEnabled = updates.moneyEnabled === undefined
+    ? (room.settings.moneyEnabled !== false)
+    : Boolean(updates.moneyEnabled);
 
   if (room.gameType && room.gameType !== "court-piece") return room;
   if (!PLAYER_COUNTS.includes(playerCount)) throw new Error("Choose a valid table size.");
@@ -232,7 +240,7 @@ export function updateRoomSettings(room, seat, updates = {}) {
   if (!TABLE_THEMES.includes(tableTheme)) throw new Error("Choose a valid table theme.");
 
   if (playerCount !== currentPlayers) resizeTable(room, playerCount);
-  room.settings = { deckSize, mode, auctionMode, playerCount, gameType: room.gameType };
+  room.settings = { deckSize, mode, auctionMode, playerCount, stakePaise, moneyEnabled, gameType: room.gameType };
   room.tableTheme = tableTheme;
   return room;
 }
@@ -641,7 +649,7 @@ export function roomView(room, viewer) {
     suits: SUITS,
     settings: room.settings,
     settingsLocked: Boolean(room.settingsLocked || room.round),
-    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, playerCounts: PLAYER_COUNTS, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS, playerNames: PLAYER_NAMES }
+    options: { gameTypes: GAME_TYPES, deckSizes: DECK_SIZES, playerCounts: PLAYER_COUNTS, modes: MODES, tableThemes: TABLE_THEMES, avatarIds: AVATAR_IDS, playerNames: PLAYER_NAMES, defaultStakePaise: STAKE_PAISE }
   };
 }
 

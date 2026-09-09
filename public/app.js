@@ -431,11 +431,15 @@ async function enterRoom(kind) {
       const playerCount = gameType === "court-piece"
         ? Number(document.querySelector('input[name="create-player-count"]:checked')?.value) || 4
         : 4;
+      const moneyEnabled = gameType === "court-piece" ? Boolean($("#create-money-enabled")?.checked) : false;
+      const stakeRupees = Math.round(Number($("#create-stake")?.value) || 5);
       const result = await emit("create_room", {
         name,
         avatarId,
         gameType,
         playerCount,
+        moneyEnabled,
+        stakePaise: Math.min(1_000_000, Math.max(100, stakeRupees * 100)),
         tableTheme: selectedTheme("create-table-theme", createTableTheme),
         auctionMode: readAuctionMode($("#create-auction-mode") || $("#auction-mode"), false)
       });
@@ -1243,11 +1247,14 @@ function lobbySettingsPayload() {
   const deckSelect = $("#deck-size");
   const modeSelect = $("#game-mode");
   const auctionControl = $("#auction-mode");
+  const stakeRupees = Math.round(Number($("#lobby-stake")?.value) || (state.settings.stakePaise || 500) / 100);
   return {
     deckSize: Number(deckSelect?.value || state.settings.deckSize),
     mode: modeSelect?.value || state.settings.mode,
     tableTheme: selectedTheme("table-theme", state.tableTheme),
-    auctionMode: readAuctionMode(auctionControl, state.settings.auctionMode)
+    auctionMode: readAuctionMode(auctionControl, state.settings.auctionMode),
+    moneyEnabled: $("#money-enabled") ? Boolean($("#money-enabled").checked) : state.settings.moneyEnabled !== false,
+    stakePaise: Math.min(1_000_000, Math.max(100, stakeRupees * 100))
   };
 }
 
@@ -1287,6 +1294,18 @@ function renderLobbySettings(host) {
     else auctionControl.value = String(Boolean(state.settings.auctionMode));
     auctionControl.disabled = !host;
     auctionControl.onchange = updateLobbySettings;
+  }
+  const moneyControl = $("#money-enabled");
+  const stakeControl = $("#lobby-stake");
+  if (moneyControl) {
+    moneyControl.checked = state.settings?.moneyEnabled !== false;
+    moneyControl.disabled = !host;
+    moneyControl.onchange = updateLobbySettings;
+  }
+  if (stakeControl) {
+    if (document.activeElement !== stakeControl) stakeControl.value = Math.round((state.settings?.stakePaise || 500) / 100);
+    stakeControl.disabled = !host;
+    stakeControl.onchange = updateLobbySettings;
   }
 
   const availableThemes = state.options?.tableThemes || tableThemes;
@@ -1836,15 +1855,25 @@ function runGameEffects() {
       && newlyPlayed.card.suit === trump
       && winningPlay?.card.id === newlyPlayed.card.id;
     if (isTrumpCut) {
-      const cutAcePlay = previousTrick.find((play) => play.card.rank === "A"
-        && play.card.suit === leadSuit
-        && state.players[play.seat]?.team !== team);
-      const aceCut = Boolean(cutAcePlay);
-      const aceElement = cutAcePlay
-        ? document.querySelector(`.played-card[data-card="${cutAcePlay.card.id}"]`)
+      // Whatever card was leading the trick before this trump landed is the one
+      // getting "cut". Slice that real card — an Ace just gets extra fireworks.
+      const beatenPlay = visibleWinningPlay(previousTrick, trump);
+      const beatenIsOpponent = beatenPlay && state.players[beatenPlay.seat]?.team !== team;
+      const cutElement = beatenPlay && beatenIsOpponent
+        ? document.querySelector(`.played-card[data-card="${beatenPlay.card.id}"]`)
         : null;
+      const aceCut = Boolean(beatenPlay && beatenIsOpponent && beatenPlay.card.rank === "A");
       const streak = effectStreaks.trick.team === team ? Math.max(1, effectStreaks.trick.count) : 1;
-      effects?.onTrumpCut?.({ aceCut, aceElement, element: card, team, isLocal: isLocalTeam(team), streak });
+      effects?.onTrumpCut?.({
+        aceCut,
+        cutCard: beatenPlay?.card || null,
+        cutElement,
+        aceElement: cutElement, // back-compat alias for the sliced-card element
+        element: card,
+        team,
+        isLocal: isLocalTeam(team),
+        streak
+      });
     }
   }
 
@@ -1885,7 +1914,8 @@ function render() {
   game.classList.remove("hidden");
   $("#copy-code").textContent = state.code;
   $("#game-name").textContent = meta.eyebrow;
-  $("#ledger-toggle").classList.toggle("hidden", isSpectator());
+  const moneyOn = normalizeGameType(state.gameType) === "court-piece" && state.settings?.moneyEnabled !== false;
+  $("#ledger-toggle").classList.toggle("hidden", isSpectator() || !moneyOn);
   $("#score-a-label").textContent = meta.scoreA;
   $("#score-b-label").textContent = meta.scoreB;
   $("#score-a").textContent = state.score[0];

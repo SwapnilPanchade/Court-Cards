@@ -390,10 +390,14 @@ button:active:not(:disabled) { transform: translateY(2px); }
 /* Five visual swatches */
 .theme-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
 .theme-picker legend { margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; }
-.theme-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.theme-choice { min-width: 0; margin: 0; padding: 4px; border: 1px solid transparent; border-radius: 10px; color: var(--muted); cursor: pointer; text-align: center; transition: transform .15s, border-color .15s, color .15s, background .15s; }
-.theme-choice:hover { color: var(--ink); transform: translateY(-2px); }
-.theme-choice > span:last-child { display: block; margin-top: 4px; overflow: hidden; font-size: 8px; font-weight: 800; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; }
+.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.theme-choice { min-width: 0; margin: 0; padding: 7px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; color: var(--muted); cursor: pointer; text-align: center; transition: transform .15s, border-color .15s, color .15s, background .15s; }
+.theme-choice:hover { color: var(--ink); transform: translateY(-2px); border-color: rgba(255,255,255,.24); }
+.theme-choice > span:last-child { display: block; margin-top: 6px; overflow: hidden; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; }
+/* Selected table style reads clearly on a phone. */
+.theme-picker input:checked + .theme-choice,
+.game-selector .theme-picker input:checked + .theme-choice { border-color: var(--accent, #e9bb62); background: rgba(255,255,255,.06); color: var(--ink); box-shadow: 0 0 0 1px rgba(233,187,98,.35), 0 10px 22px rgba(0,0,0,.22); }
+.theme-picker input:checked + .theme-choice .theme-swatch { outline: 2px solid var(--accent, #e9bb62); outline-offset: 1px; }
 .theme-swatch { position: relative; width: 100%; aspect-ratio: 1.45; display: block; overflow: hidden; border: 1px solid rgba(255, 255, 255, .28); border-radius: 7px; box-shadow: inset 0 0 18px rgba(0, 0, 0, .25); }
 .theme-swatch::before { content: ""; position: absolute; inset: 21% 10%; border: 2px solid currentColor; border-radius: 50%; background: rgba(255, 255, 255, .08); }
 .theme-swatch::after { content: ""; position: absolute; left: 41%; bottom: 10%; width: 18%; height: 32%; border-radius: 2px; background: #fffdf4; box-shadow: -5px 1px 0 -1px #fffdf4, 5px 1px 0 -1px #fffdf4; }
@@ -549,8 +553,8 @@ button:active:not(:disabled) { transform: translateY(2px); }
 
 .spectator-bar { position: relative; z-index: 14; width: min(100%, 430px); min-height: 32px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; flex: 0 0 auto; margin: 0 auto 3px; padding: 3px 7px 3px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .spectator-bar span,
-.spectator-bar b { color: var(--accent); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-.spectator-bar select { min-height: 24px; height: 24px; margin: 0; padding: 3px 7px; font-size: 9px; }
+.spectator-bar b { color: var(--accent); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.spectator-bar select { min-height: 40px; height: 40px; margin: 0; padding: 6px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2, var(--surface)); color: var(--ink, #fff); font-size: 14px; font-weight: 700; }
 .spectator-bar b { color: var(--muted); }
 
 /* Environment layers; themes reveal only what they need. */
@@ -1509,6 +1513,17 @@ body[data-game-type="rummy"] .table-size-selector { display: none; }
   background: linear-gradient(110deg, rgba(255,209,102,.13), rgba(255,255,255,.055));
   box-shadow: 0 0 0 1px rgba(255,209,102,.18), 0 14px 26px rgba(0,0,0,.18);
 }
+
+/* Money / stake setting — Court Piece only, stake hidden when tracking is off. */
+.money-setting { display: grid; gap: 10px; margin: 0 0 14px; }
+body[data-game-type="judgment"] .money-setting,
+body[data-game-type="rummy"] .money-setting { display: none; }
+.money-setting:has(input[type="checkbox"]:not(:checked)) .stake-input { display: none; }
+.stake-input { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; background: rgba(255,255,255,.03); font-size: 12px; font-weight: 700; color: var(--platform-muted); }
+.stake-field { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; background: rgba(0,0,0,.25); color: var(--ink, #fff); }
+.stake-field b { color: var(--platform-yellow); font-size: 13px; }
+.stake-field input { width: 68px; border: 0; background: transparent; color: inherit; font-size: 15px; font-weight: 800; text-align: right; -moz-appearance: textfield; }
+.stake-field input::-webkit-outer-spin-button, .stake-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .game-name {
   margin-bottom: 4px;
