@@ -630,6 +630,23 @@ function renderSettlementLedger() {
   filter.value = roster.includes(ledgerFilter) ? ledgerFilter : "";
   ledgerFilter = filter.value;
   const filteredGames = games.filter((entry) => !ledgerFilter || [...entry.teamA, ...entry.teamB].includes(ledgerFilter));
+  const bidLabel = (item) => item.action === "pass" ? "passed"
+    : item.action === "give" ? "gave it away"
+      : item.action === "keep" ? `kept ${item.bid}`
+        : item.action === "forced_bid" ? `opened ${item.bid}` : `bid ${item.bid}`;
+  // Same story the round-end sheet told; games recorded before details existed show none.
+  const gameDetail = (details) => {
+    if (!details) return "";
+    const parts = [];
+    if (details.caller) parts.push(`Hukum <b>${details.trump ? symbols[details.trump] : "?"}</b> by <b>${details.caller}</b>${details.mode === "hidden" ? " (hidden)" : ""}`);
+    parts.push(`Hands <b>A ${details.tricks[0]}–${details.tricks[1]} B</b>`);
+    if (details.contract) parts.push(`<span class="${details.contract.made ? "is-made" : "is-failed"}">${details.contract.holder || `Team ${details.contract.team ? "B" : "A"}`} needed ${details.contract.bid} · ${details.contract.made ? "made" : "failed"}</span>`);
+    if (details.bids?.length) parts.push(`Auction: ${details.bids.map((item) => `${item.player} ${bidLabel(item)}`).join(", ")}`);
+    else if (details.passedBy?.length) parts.push(`Passed: ${details.passedBy.join(", ")}`);
+    if (details.court) parts.push("<b>Court!</b> clean sweep");
+    if (details.roomScore) parts.push(`Score ${details.roomScore[0]}–${details.roomScore[1]}`);
+    return `<div class="ledger-game-detail">${parts.map((part) => `<span>${part}</span>`).join("")}</div>`;
+  };
   $("#ledger-games").innerHTML = filteredGames.length
     ? filteredGames.map((entry) => {
       const aWon = entry.winnerTeam === 0;
@@ -638,9 +655,12 @@ function renderSettlementLedger() {
         <span class="ledger-game-team ${aWon ? "is-winner" : ""}"><small>Team A</small><b>${entry.teamA.join(" + ")}</b></span>
         <span class="ledger-game-result"><strong>${aWon ? "A" : "B"} won</strong><small>${time}</small></span>
         <span class="ledger-game-team ${aWon ? "" : "is-winner"}"><small>Team B</small><b>${entry.teamB.join(" + ")}</b></span>
+        ${gameDetail(entry.details)}
       </li>`;
     }).join("")
     : `<li class="is-empty">${games.length ? "No games for this player yet." : "No tracked games today."}</li>`;
+
+  $("#ledger-sheet-sync").classList.toggle("hidden", !settlementState.sheetSync?.configured || isSpectator());
 
   const newDay = $("#ledger-new-day");
   const isHost = state && !isSpectator() && state.you.seat === state.hostSeat;
@@ -761,6 +781,15 @@ $("#accept-restart").addEventListener("click", () => emit("respond_restart", { a
 $("#decline-restart").addEventListener("click", () => emit("respond_restart", { accept: false }).catch((error) => setError(gameError, error)));
 $("#accept-team-switch")?.addEventListener("click", () => emit("respond_team_switch", { accept: true }).catch((error) => setError(gameError, error)));
 $("#decline-team-switch")?.addEventListener("click", () => emit("respond_team_switch", { accept: false }).catch((error) => setError(gameError, error)));
+$("#cancel-team-switch")?.addEventListener("click", () => emit("respond_team_switch", { accept: false }).then(() => toast("Switch request cancelled")).catch((error) => setError(gameError, error)));
+$("#ledger-sheet-sync")?.addEventListener("click", (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  emit("sync_sheet")
+    .then((result) => toast(`Google Sheet updated · ${result.sheet.games} games`))
+    .catch((error) => toast(error.message))
+    .finally(() => { button.disabled = false; });
+});
 $("#transfer-host-button")?.addEventListener("click", () => {
   const seat = Number($("#transfer-host-select")?.value);
   emit("transfer_host", { seat })
@@ -1060,9 +1089,7 @@ function renderSeats() {
       : `<div class="avatar empty-avatar">+</div><div class="seat-nameplate"><span class="seat-player-name">Empty seat</span></div>`;
     element.querySelector("[data-switch-seat]")?.addEventListener("click", (event) => {
       event.stopPropagation();
-      emit("request_team_switch", { targetSeat: Number(event.currentTarget.dataset.switchSeat) })
-        .then(() => toast("Switch requested"))
-        .catch((error) => setError(gameError, error));
+      requestTeamSwitchWith(Number(event.currentTarget.dataset.switchSeat));
     });
     element.querySelector("[data-kick-seat]")?.addEventListener("click", async (event) => {
       event.stopPropagation();
@@ -1564,6 +1591,7 @@ function renderPanels() {
   renderAvatarPicker();
   renderHostTransfer();
   renderTeamSwitchPanel();
+  renderSwitchTargets();
   document.querySelector(".team-choice-block")?.classList.toggle("hidden", state.gameType !== "court-piece");
   const lobbyIntro = document.querySelector("#lobby-panel .panel-intro");
   if (lobbyIntro) lobbyIntro.textContent = state.gameType === "court-piece"
@@ -1625,9 +1653,10 @@ function renderPanels() {
     const requester = state.players[vote.requesterSeat]?.name || "A player";
     const approved = vote.approvals.includes(state.you.seat);
     $("#restart-title").textContent = `${requester} wants a fresh deal`;
+    const seats = tableSize();
     $("#restart-note").textContent = approved
-      ? `You accepted · ${vote.approvals.length}/4 players accepted`
-      : `Starts a new deal. Room score stays ${state.score[0]}–${state.score[1]}. ${vote.approvals.length}/4 accepted.`;
+      ? `You accepted · ${vote.approvals.length}/${seats} players accepted`
+      : `Starts a new deal. Room score stays ${state.score[0]}–${state.score[1]}. ${vote.approvals.length}/${seats} accepted.`;
     $("#accept-restart").classList.toggle("hidden", approved);
     $("#decline-restart").textContent = vote.requesterSeat === state.you.seat ? "Cancel request" : "Decline";
   }
@@ -1647,16 +1676,54 @@ function renderHostTransfer() {
   ).join("");
 }
 
+function requestTeamSwitchWith(targetSeat) {
+  const target = state.players[targetSeat];
+  emit("request_team_switch", { targetSeat })
+    .then(() => toast(`Asked ${target?.name || "player"} to swap`))
+    .catch((error) => setError(gameError, error));
+}
+
+function switchTargets() {
+  const me = isSpectator() ? null : state.players[state.you.seat];
+  if (!me || state.gameType !== "court-piece" || !state.canTeamSwitch || state.teamSwitchRequest) return [];
+  return state.players
+    .map((player, seat) => ({ player, seat }))
+    .filter(({ player, seat }) => player && !player.bot && seat !== state.you.seat && player.team !== me.team);
+}
+
+// Switch buttons live inside the lobby / round-over sheets so they stay reachable
+// on phones, where those sheets cover part of the table.
+function renderSwitchTargets() {
+  const targets = switchTargets();
+  document.querySelectorAll("[data-switch-targets]").forEach((box) => {
+    box.classList.toggle("hidden", !targets.length);
+    box.innerHTML = targets.length
+      ? `<div class="setting-title-row"><span>Switch teams</span><small>They must accept</small></div><div class="switch-target-list">${targets.map(({ player, seat }) => `<button class="secondary switch-target" type="button" data-switch-seat="${seat}"><b>Swap with ${player.name}</b><small>Team ${player.team ? "B" : "A"}</small></button>`).join("")}</div>`
+      : "";
+    box.querySelectorAll("[data-switch-seat]").forEach((button) => button.addEventListener("click", () => requestTeamSwitchWith(Number(button.dataset.switchSeat))));
+  });
+}
+
 function renderTeamSwitchPanel() {
   const panel = $("#team-switch-panel");
   if (!panel) return;
-  const request = state.teamSwitchRequest;
-  const forMe = !isSpectator() && request && request.toSeat === state.you.seat;
-  panel.classList.toggle("hidden", !forMe);
-  if (!forMe) return;
+  const request = isSpectator() ? null : state.teamSwitchRequest;
+  const forMe = Boolean(request) && request.toSeat === state.you.seat;
+  const fromMe = Boolean(request) && request.fromSeat === state.you.seat;
+  panel.classList.toggle("hidden", !forMe && !fromMe);
+  panel.classList.toggle("is-waiting", fromMe);
+  $("#team-switch-actions").classList.toggle("hidden", !forMe);
+  $("#cancel-team-switch").classList.toggle("hidden", !fromMe);
+  if (!forMe && !fromMe) return;
   const from = state.players[request.fromSeat];
-  $("#team-switch-title").textContent = `${from?.name || "A player"} wants to switch teams`;
-  $("#team-switch-note").textContent = `They are on Team ${from?.team ? "B" : "A"}. Accept to swap seats.`;
+  const to = state.players[request.toSeat];
+  if (forMe) {
+    $("#team-switch-title").textContent = `${from?.name || "A player"} wants to swap seats with you`;
+    $("#team-switch-note").textContent = `Accept and you move to Team ${from?.team ? "B" : "A"}; ${from?.name || "they"} joins Team ${to?.team ? "B" : "A"}.`;
+  } else {
+    $("#team-switch-title").textContent = `Waiting for ${to?.name || "player"}`;
+    $("#team-switch-note").textContent = `You asked to swap seats with ${to?.name || "them"}. They need to accept.`;
+  }
 }
 
 function renderTimer() {
@@ -1689,8 +1756,8 @@ function renderStatus() {
   }
   if (round?.phase === "choosing_trump") text = !isSpectator() && round.caller === state.you.seat ? "Choose the hukum" : `${state.players[round.caller].name} is choosing hukum`;
   if (round?.phase === "playing") text = !isSpectator() && round.turn === state.you.seat
-    ? "Your turn"
-    : `${state.players[round.turn].name}'s turn`;
+    ? round.autoPlaying ? "Only one card to play · playing it" : "Your turn"
+    : round.autoPlaying ? `${state.players[round.turn].name} has one card to play` : `${state.players[round.turn].name}'s turn`;
   if (round?.phase === "trick_complete") text = `${state.players[round.pendingWinner].name} won the trick`;
   if (round?.phase === "round_over") text = "Round complete";
   $("#status").textContent = text;
@@ -1734,7 +1801,7 @@ function hukumSummary() {
     return { eyebrow: "CONTRACT DECISION", title: `${contractPlayer} · ${contractBid}`, detail: `${caller} decides who keeps Hukum`, history };
   }
   if (contractBid !== null && contractBid !== undefined) {
-    return { eyebrow: `TEAM ${team ? "B" : "A"} CONTRACT`, title: `${contractPlayer} called ${contractBid}`, detail: `Hukum ${suit} · ${caller} opened`, history };
+    return { eyebrow: `TEAM ${team ? "B" : "A"} CONTRACT`, title: `${contractPlayer} needs ${contractBid} hands`, detail: `Hukum ${suit} · auction closed`, history };
   }
   return { eyebrow: "HUKUM CALL", title: `${caller} · ${suit}`, detail: (round.passedBy || []).length ? `${round.passedBy.length} passed before the call` : "Normal Hukum · no contract bid", history };
 }
@@ -1775,16 +1842,18 @@ function renderPremiumHud() {
   }
 }
 
+// Settled-hukum badge. Avoids the word "Bid" once the auction is over, and says
+// "hidden" explicitly so nobody wonders whether hukum was revealed.
 function compactHukumLabel(round) {
-  if (!round?.trump) return "";
+  if (!round || state.gameType !== "court-piece" || !["playing", "trick_complete", "round_over"].includes(round.phase)) return "";
   const bid = round.bidState?.contractBid ?? round.bidState?.highestBid;
-  const callerSeat = bid !== null && bid !== undefined && round.bidState?.decision === "give"
-    ? round.bidState.highestBidder
-    : round.caller;
-  const caller = state.players[callerSeat]?.name || "Caller";
-  return bid !== null && bid !== undefined
-    ? `Bid ${bid} · Hukum ${symbols[round.trump]} · ${caller}`
-    : `Hukum ${symbols[round.trump]} · ${caller}`;
+  const hasContract = bid !== null && bid !== undefined;
+  const holderSeat = hasContract && round.bidState?.decision === "give" ? round.bidState.highestBidder : round.caller;
+  const holder = state.players[holderSeat]?.name || "Caller";
+  const target = hasContract ? ` · needs ${bid} hands` : "";
+  if (!round.trump) return `Hukum hidden · ${holder}${target}`;
+  const secret = round.mode === "hidden" && !round.trumpRevealed ? " (only you)" : "";
+  return `Hukum ${symbols[round.trump]}${secret} · ${holder}${target}`;
 }
 
 function viewerTeam() {
@@ -1928,8 +1997,9 @@ function render() {
     }
   });
   const trump = $("#trump-badge");
-  trump.classList.toggle("hidden", !state.round?.trump);
-  trump.textContent = compactHukumLabel(state.round);
+  const hukumLabel = compactHukumLabel(state.round);
+  trump.classList.toggle("hidden", !hukumLabel);
+  trump.textContent = hukumLabel;
   trump.classList.toggle("red", ["hearts", "diamonds"].includes(state.round?.trump));
   const dealScore = $("#deal-score");
   dealScore.classList.toggle("hidden", !state.round);

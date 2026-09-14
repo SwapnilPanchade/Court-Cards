@@ -6,6 +6,7 @@ import {
   normalizeSettlementEntry,
   summarizeSettlement
 } from "./settlement.js";
+import { buildSheetExport } from "./sheet-export.js";
 
 export class SettlementLedgerDurableObject extends DurableObject {
   constructor(ctx, env) {
@@ -58,6 +59,15 @@ export class SettlementLedgerDurableObject extends DurableObject {
       INSERT OR IGNORE INTO _sql_schema_migrations (id, applied_at) VALUES (1, ${Date.now()});
       INSERT OR IGNORE INTO _sql_schema_migrations (id, applied_at) VALUES (2, ${Date.now()});
     `);
+    // Migration 3: optional round-end details per game (JSON). Additive; old rows stay NULL.
+    if (!this.sql.exec("SELECT id FROM _sql_schema_migrations WHERE id = 3").toArray().length) {
+      try {
+        this.sql.exec("ALTER TABLE settlement_games ADD COLUMN details TEXT");
+      } catch (error) {
+        if (!/duplicate column/i.test(String(error?.message))) throw error;
+      }
+      this.sql.exec("INSERT OR IGNORE INTO _sql_schema_migrations (id, applied_at) VALUES (3, ?)", Date.now());
+    }
   }
 
   ensureOpenSession(now = Date.now()) {
@@ -83,8 +93,8 @@ export class SettlementLedgerDurableObject extends DurableObject {
     const session = this.ensureOpenSession(entry.recordedAt);
     this.sql.exec(
       `INSERT INTO settlement_games
-        (id, session_id, room_code, recorded_at, stake_paise, winner_team, team_a, team_b)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, session_id, room_code, recorded_at, stake_paise, winner_team, team_a, team_b, details)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       entry.id,
       session.id,
       entry.roomCode,
@@ -92,21 +102,24 @@ export class SettlementLedgerDurableObject extends DurableObject {
       entry.stakePaise,
       entry.winnerTeam,
       JSON.stringify(entry.teamA),
-      JSON.stringify(entry.teamB)
+      JSON.stringify(entry.teamB),
+      entry.details ? JSON.stringify(entry.details) : null
     );
+    this.queueSheetSync("game");
     return { created: true, id: entry.id };
   }
 
   readGames(sessionId) {
     return this.sql.exec(
       `SELECT id, room_code AS roomCode, recorded_at AS recordedAt,
-        stake_paise AS stakePaise, winner_team AS winnerTeam, team_a AS teamA, team_b AS teamB
+        stake_paise AS stakePaise, winner_team AS winnerTeam, team_a AS teamA, team_b AS teamB, details
        FROM settlement_games WHERE session_id = ? ORDER BY recorded_at DESC`,
       sessionId
     ).toArray().map((row) => ({
       ...row,
       teamA: JSON.parse(row.teamA),
-      teamB: JSON.parse(row.teamB)
+      teamB: JSON.parse(row.teamB),
+      details: row.details ? JSON.parse(row.details) : null
     }));
   }
 
@@ -161,8 +174,63 @@ export class SettlementLedgerDurableObject extends DurableObject {
       roster: PLAYER_NAMES,
       ...summary,
       transfers,
-      completedPayments
+      completedPayments,
+      sheetSync: { configured: Boolean(this.env?.SHEET_SYNC_URL && this.env?.SHEET_SYNC_SECRET) }
     };
+  }
+
+  // Every day, game and payment, for the Google Sheet mirror.
+  exportForSheet(now = Date.now()) {
+    const sessions = this.sql.exec(
+      "SELECT id, started_at AS startedAt, closed_at AS closedAt FROM settlement_sessions"
+    ).toArray();
+    const games = this.sql.exec(
+      `SELECT id, session_id AS sessionId, room_code AS roomCode, recorded_at AS recordedAt,
+        stake_paise AS stakePaise, winner_team AS winnerTeam, team_a AS teamA, team_b AS teamB, details
+       FROM settlement_games`
+    ).toArray().map((row) => ({
+      ...row,
+      teamA: JSON.parse(row.teamA),
+      teamB: JSON.parse(row.teamB),
+      details: row.details ? JSON.parse(row.details) : null
+    }));
+    const payments = this.sql.exec(
+      `SELECT id, session_id AS sessionId, from_player AS "from", to_player AS "to", amount_paise AS amountPaise,
+        payer_confirmed AS payerConfirmed, receiver_confirmed AS receiverConfirmed, created_at AS createdAt,
+        completed_at AS completedAt, voided_at AS voidedAt, voided_by AS voidedBy
+       FROM settlement_payments`
+    ).toArray();
+    return buildSheetExport({ sessions, games, payments, snapshot: this.getSnapshot(), roster: PLAYER_NAMES, exportedAt: now });
+  }
+
+  async syncSheet(reason = "manual") {
+    const url = this.env?.SHEET_SYNC_URL;
+    const secret = this.env?.SHEET_SYNC_SECRET;
+    if (!url || !secret) return { synced: false, configured: false };
+    const exported = this.exportForSheet();
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret, reason, ...exported }),
+      redirect: "follow"
+    });
+    let result = null;
+    try {
+      result = JSON.parse(await response.text());
+    } catch (_) { /* Apps Script answered with HTML, usually a permission or deployment page. */ }
+    if (!response.ok || !result?.ok) {
+      throw new Error(`Google Sheet sync failed${result?.error ? `: ${result.error}` : ` (HTTP ${response.status})`}.`);
+    }
+    const games = exported.sheets.find((sheet) => sheet.name === "Games").rows.length;
+    return { synced: true, configured: true, games, exportedAt: exported.exportedAt };
+  }
+
+  // Mirror after a ledger change without making the game wait on Google.
+  queueSheetSync(reason) {
+    if (!this.env?.SHEET_SYNC_URL || !this.env?.SHEET_SYNC_SECRET) return;
+    this.ctx.waitUntil(this.syncSheet(reason).catch((error) => {
+      console.error(JSON.stringify({ event: "sheet_sync_failed", reason, message: error.message }));
+    }));
   }
 
   confirmSettlement(actorValue, rawTransfer = {}, now = Date.now()) {
@@ -239,6 +307,7 @@ export class SettlementLedgerDurableObject extends DurableObject {
         payment.id
       );
     }
+    this.queueSheetSync("payment");
     return this.getSnapshot();
   }
 
@@ -264,6 +333,7 @@ export class SettlementLedgerDurableObject extends DurableObject {
       now,
       payment.id
     );
+    this.queueSheetSync("payment_reset");
     return this.getSnapshot();
   }
 
@@ -279,6 +349,7 @@ export class SettlementLedgerDurableObject extends DurableObject {
       current.id
     );
     this.ensureOpenSession(now + 1);
+    this.queueSheetSync("new_day");
     return this.getSnapshot();
   }
 }

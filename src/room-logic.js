@@ -57,6 +57,8 @@ export const DEFAULT_MODE = "single";
 export { PLAYER_COUNTS, DEFAULT_PLAYER_COUNT };
 export const TURN_TIMEOUT_MS = 40_000;
 export const BOT_ACTION_DELAY_MS = 650;
+// Beat before a human's only legal card is played for them, so the table sees it land.
+export const FORCED_PLAY_DELAY_MS = 1_200;
 export const COLLECTION_MS = 1_600;
 
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -335,6 +337,11 @@ export function requestTeamSwitch(room, fromSeat, targetSeat) {
 export function respondTeamSwitch(room, seat, accept) {
   const request = room.teamSwitchRequest;
   if (!request) throw new Error("No team switch request is active.");
+  if (seat === request.fromSeat && !accept) {
+    // The requester withdrew their own request.
+    room.teamSwitchRequest = null;
+    return { swapped: false, cancelled: true };
+  }
   if (seat !== request.toSeat) throw new Error("Only the requested player can respond.");
   if (!canRequestTeamSwitch(room)) {
     room.teamSwitchRequest = null;
@@ -397,6 +404,8 @@ export function kickPlayer(room, hostSeat, targetSeat, { randomUUID = () => cryp
   const removedToken = target.bot ? null : target.token;
   if (activeRound) {
     room.players[seat] = makeBot(seat, randomUUID);
+    // A bot finishes this deal, so it no longer counts for money.
+    if (room.round.settlement) room.round.settlement.eligible = false;
     return { seat, removedToken, replacedWithBot: true };
   }
 
@@ -436,6 +445,8 @@ export function leavePlayerSeat(room, seat, { randomUUID = () => crypto.randomUU
 
   if (midGame) {
     room.players[seat] = makeBot(seat, randomUUID);
+    // A bot finishes this deal, so it no longer counts for money.
+    if (room.round.settlement) room.round.settlement.eligible = false;
     return { destroyed: !hasHumans(room), replacedWithBot: true };
   }
 
@@ -637,6 +648,7 @@ export function roomView(room, viewer) {
       canRevealTrump: isPlayer && round.mode === "hidden" && !round.trumpRevealed && round.turn === viewerSeat && (viewerSeat === round.caller && !round.trick.length || (round.trick.length && !round.hands[viewerSeat].some((card) => card.suit === round.trick[0].card.suit))),
       turn: round.turn,
       turnDeadline: round.turnDeadline || null,
+      autoPlaying: room.alarm?.kind === "forced" && room.alarm.seat === round.turn,
       pendingWinner: round.pendingWinner,
       trick: round.trick,
       tricks: round.tricks,
@@ -717,6 +729,29 @@ export function pickTimeoutCard(round, seat, randomInt = (max) => Math.floor(Mat
     if (trumps.length) legal = trumps;
   }
   return legal[randomInt(legal.length)];
+}
+
+// The card a Court Piece player must play when they have exactly one legal option
+// (one card of the led suit, or their last card). Null when there is a real choice,
+// including hidden hukum while the player could still reveal it first.
+export function forcedCard(round, seat) {
+  if (round?.phase !== "playing" || round.turn !== seat) return null;
+  if (round.gameType && round.gameType !== "court-piece") return null;
+  const hand = round.hands?.[seat] || [];
+  const leadSuit = round.trick[0]?.card.suit;
+  let legal = leadSuit ? hand.filter((card) => card.suit === leadSuit) : hand;
+  if (!legal.length) legal = hand;
+  if (round.mustTrumpSeat === seat) {
+    const trumps = hand.filter((card) => card.suit === round.trump);
+    if (trumps.length) legal = trumps;
+  }
+  if (legal.length !== 1) return null;
+  if (round.mode === "hidden" && !round.trumpRevealed) {
+    const callerLead = seat === round.caller && !leadSuit;
+    const isVoid = Boolean(leadSuit) && !hand.some((card) => card.suit === leadSuit);
+    if (callerLead || isVoid) return null;
+  }
+  return legal[0];
 }
 
 export {

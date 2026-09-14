@@ -10,6 +10,7 @@ import {
   createEmptyRoom,
   createRound,
   defaultAvatarForSeat,
+  forcedCard,
   hasHumans,
   HUMAN_IDLE_TIMEOUT_MS,
   humanIdleDeadline,
@@ -226,4 +227,53 @@ test("team choice and avatars still work in lobby", () => {
   assert.equal(chooseRoomTeam(room, 0, "B"), 3);
   assert.equal(room.hostSeat, 3);
   assert.equal(chooseRoomAvatar(room, 3, "cool-aunty"), "cool-aunty");
+});
+
+test("requester can cancel a team switch request", () => {
+  const room = createEmptyRoom("ABC12", human("Host", "host"));
+  room.players[1] = human("Opp", "opp");
+  requestTeamSwitch(room, 0, 1);
+  assert.deepEqual(respondTeamSwitch(room, 0, false), { swapped: false, cancelled: true });
+  assert.equal(room.teamSwitchRequest, null);
+  requestTeamSwitch(room, 0, 1);
+  assert.throws(() => respondTeamSwitch(room, 0, true), /requested player/);
+});
+
+test("a bot taking over a seat mid-deal removes that deal from the money ledger", () => {
+  const room = createEmptyRoom("ABC12", human("Host", "host"));
+  room.players[1] = human("Guest", "guest");
+  room.players[2] = human("P2", "p2");
+  room.players[3] = human("P3", "p3");
+  room.round = createRound(3, room.settings, () => 0.5);
+  room.round.settlement = { eligible: true };
+  leavePlayerSeat(room, 1, { randomUUID: () => "bot-1" });
+  assert.equal(room.round.settlement.eligible, false);
+
+  room.round.settlement = { eligible: true };
+  kickPlayer(room, 0, 2, { randomUUID: () => "bot-2" });
+  assert.equal(room.players[2].bot, true);
+  assert.equal(room.round.settlement.eligible, false);
+});
+
+test("forced card plays only when there is exactly one legal choice", () => {
+  const c = (rank, suit) => ({ id: `${rank}-${suit}`, rank, suit, value: 1 });
+  const round = {
+    phase: "playing", turn: 1, caller: 0, mode: "single", trump: "spades", trumpRevealed: true,
+    trick: [{ seat: 0, card: c("K", "hearts") }],
+    hands: [[], [c("9", "hearts"), c("A", "clubs"), c("7", "spades")], [], []]
+  };
+  assert.equal(forcedCard(round, 1).id, "9-hearts");
+  assert.equal(forcedCard(round, 2), null);
+  round.hands[1].push(c("J", "hearts"));
+  assert.equal(forcedCard(round, 1), null);
+
+  round.hands[1] = [c("7", "spades")];
+  round.trick = [];
+  assert.equal(forcedCard(round, 1).id, "7-spades");
+
+  round.trick = [{ seat: 0, card: c("K", "hearts") }];
+  round.mode = "hidden";
+  round.trumpRevealed = false;
+  assert.equal(forcedCard(round, 1), null, "void in hidden hukum keeps the reveal choice");
+  assert.equal(forcedCard({ ...round, mode: "single", trumpRevealed: true, gameType: "judgment" }, 1), null);
 });

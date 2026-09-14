@@ -280,6 +280,7 @@
               <small>₹5 per player · ₹10 changes hands per game</small>
             </div>
             <div class="ledger-head-actions">
+              <button id="ledger-sheet-sync" class="text-button hidden" type="button">Sync to Sheet</button>
               <button id="ledger-refresh" class="text-button" type="button">Refresh</button>
               <button id="ledger-close" class="text-button" type="button">Close</button>
             </div>
@@ -453,6 +454,8 @@
               </div>
             </div>
 
+            <div class="switch-targets hidden" data-switch-targets></div>
+
             <div id="host-transfer-block" class="host-transfer-block hidden">
               <div class="setting-title-row">
                 <span>Transfer host</span>
@@ -475,10 +478,11 @@
           <p class="eyebrow">Team switch</p>
           <h2 id="team-switch-title">Switch teams?</h2>
           <p id="team-switch-note"></p>
-          <div class="restart-actions">
+          <div id="team-switch-actions" class="restart-actions">
             <button id="decline-team-switch" class="secondary" type="button">Decline</button>
             <button id="accept-team-switch" class="primary" type="button">Accept switch</button>
           </div>
+          <button id="cancel-team-switch" class="secondary team-switch-cancel hidden" type="button">Cancel request</button>
         </section>
 
         <div id="bot-picker" class="bot-picker hidden" role="dialog" aria-labelledby="bot-picker-title">
@@ -579,6 +583,7 @@
 
         <section id="round-panel" class="panel round-panel hidden">
           <p id="round-result"></p>
+          <div class="switch-targets hidden" data-switch-targets></div>
           <button id="next-button" class="primary">Deal next round</button>
         </section>
 

@@ -1,7 +1,9 @@
 import {
   BOT_ACTION_DELAY_MS,
   COLLECTION_MS,
+  FORCED_PLAY_DELAY_MS,
   TURN_TIMEOUT_MS,
+  forcedCard,
   cleanName,
   createEmptyRoom,
   createRound,
@@ -325,6 +327,8 @@ export class RoomDurableObject {
         return this.resetSettlement(ws, payload);
       case "start_new_settlement_day":
         return this.startNewSettlementDay(ws);
+      case "sync_sheet":
+        return this.syncSheet(ws);
       default:
         throw new Error("Unknown event.");
     }
@@ -443,6 +447,18 @@ export class RoomDurableObject {
     const settlement = await ledger.startNewDay();
     this.broadcastSettlementChanged();
     return { settlement };
+  }
+
+  async syncSheet(ws) {
+    const session = this.requirePlayer(ws);
+    const room = await this.loadRoom();
+    if (!room) throw new Error("Join a room first.");
+    this.settlementActor(room, session);
+    await this.flushPendingSettlements({ throwOnError: true });
+    const ledger = this.env.LEDGER.getByName("court-piece-private-ledger");
+    const sheet = await ledger.syncSheet("manual");
+    if (!sheet.configured) throw new Error("Google Sheet sync is not set up yet.");
+    return { sheet };
   }
 
   async joinRoom(ws, payload) {
@@ -946,6 +962,16 @@ export class RoomDurableObject {
       return;
     }
 
+    // Only one legal card: play it for the human after a short beat instead of waiting out the timer.
+    if (round.phase === "playing" && round.turn !== null && forcedCard(round, round.turn)) {
+      room.alarm = { kind: "forced", seat: round.turn };
+      round.turnDeadline = null;
+      await this.ctx.storage.put(ROOM_KEY, room);
+      await this.ctx.storage.setAlarm(Date.now() + FORCED_PLAY_DELAY_MS);
+      this.broadcast();
+      return;
+    }
+
     if (round.phase === "playing" && round.turn !== null) {
       room.alarm = { kind: "turn", seat: round.turn };
       round.turnDeadline = Date.now() + TURN_TIMEOUT_MS;
@@ -1021,6 +1047,23 @@ export class RoomDurableObject {
       }
       room.alarm = null;
       await this.saveRoom();
+      this.broadcast();
+      await this.scheduleAfterStateChange();
+      return;
+    }
+
+    if (alarm.kind === "forced") {
+      const seat = alarm.seat;
+      const card = round.turn === seat && !isBot(room, seat) ? forcedCard(round, seat) : null;
+      if (!card) {
+        await this.scheduleAfterStateChange();
+        return;
+      }
+      playGameCard(round, seat, card.id);
+      if (round.phase === "round_over") this.queueCompletedSettlement(room, round);
+      room.alarm = null;
+      await this.saveRoom();
+      await this.flushPendingSettlements();
       this.broadcast();
       await this.scheduleAfterStateChange();
       return;

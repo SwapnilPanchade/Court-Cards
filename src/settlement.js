@@ -85,8 +85,69 @@ export function settlementEntryForRound(room, round, recordedAt = Date.now()) {
     winnerTeam: round.winner,
     // Teams alternate by seat parity: A = even seats, B = odd seats.
     teamA: players.filter((_, seat) => seat % 2 === 0),
-    teamB: players.filter((_, seat) => seat % 2 === 1)
+    teamB: players.filter((_, seat) => seat % 2 === 1),
+    details: roundDetails(room, round, players)
   });
+}
+
+// What the round-end sheet showed, keyed by roster name so it survives seat swaps.
+function roundDetails(room, round, players) {
+  const bid = round.bidState;
+  const hasContract = Boolean(round.auctionMode) && bid?.contractBid !== null && bid?.contractBid !== undefined;
+  return {
+    mode: round.mode,
+    auction: Boolean(round.auctionMode),
+    caller: players[round.caller],
+    trump: round.trump,
+    tricks: round.tricks,
+    court: round.court,
+    roomScore: room.score,
+    passedBy: (round.passedBy || []).map((seat) => players[seat]),
+    bids: (bid?.history || []).map((item) => ({ player: players[item.seat], action: item.action, bid: item.bid })),
+    // After the auction, round.caller is whoever holds hukum and the contract.
+    contract: hasContract
+      ? { team: bid.contractTeam, bid: bid.contractBid, holder: players[round.caller], made: bid.contractMade, decision: bid.decision }
+      : null
+  };
+}
+
+const SUIT_NAMES = ["spades", "hearts", "diamonds", "clubs"];
+const BID_ACTIONS = ["bid", "pass", "keep", "give", "forced_bid"];
+
+function detailCount(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 && number <= 10_000 ? number : null;
+}
+
+// Optional round story stored with each ledger game; older games have none.
+export function normalizeSettlementDetails(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const contract = raw.contract && typeof raw.contract === "object" && detailCount(raw.contract.bid) !== null
+    ? {
+      team: raw.contract.team === 1 ? 1 : 0,
+      bid: detailCount(raw.contract.bid),
+      holder: canonicalRosterName(raw.contract.holder),
+      made: Boolean(raw.contract.made),
+      decision: /^[a-z_]{1,20}$/.test(String(raw.contract.decision || "")) ? raw.contract.decision : null
+    }
+    : null;
+  return {
+    mode: raw.mode === "hidden" ? "hidden" : "normal",
+    auction: Boolean(raw.auction),
+    caller: canonicalRosterName(raw.caller),
+    trump: SUIT_NAMES.includes(raw.trump) ? raw.trump : null,
+    tricks: [0, 1].map((team) => detailCount(raw.tricks?.[team]) ?? 0),
+    court: Boolean(raw.court),
+    roomScore: Array.isArray(raw.roomScore) ? [0, 1].map((team) => detailCount(raw.roomScore[team]) ?? 0) : null,
+    passedBy: Array.isArray(raw.passedBy) ? raw.passedBy.map(canonicalRosterName).filter(Boolean).slice(0, 6) : [],
+    bids: Array.isArray(raw.bids)
+      ? raw.bids.slice(0, 16)
+        .map((item) => ({ player: canonicalRosterName(item?.player), action: BID_ACTIONS.includes(item?.action) ? item.action : null, bid: detailCount(item?.bid) }))
+        .filter((item) => item.player && item.action)
+      : [],
+    contract
+  };
 }
 
 export function normalizeSettlementEntry(entry) {
@@ -110,7 +171,7 @@ export function normalizeSettlementEntry(entry) {
     throw new Error("A settlement needs equal teams of two or three different approved players.");
   }
 
-  return { id, roomCode, recordedAt, stakePaise: normalizedStake, winnerTeam, teamA, teamB };
+  return { id, roomCode, recordedAt, stakePaise: normalizedStake, winnerTeam, teamA, teamB, details: normalizeSettlementDetails(entry?.details) };
 }
 
 export function calculateBalances(games, roster = PLAYER_NAMES) {

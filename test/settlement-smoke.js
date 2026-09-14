@@ -105,6 +105,8 @@ try {
   const latest = result.settlement.games.find((game) => game.roomCode === created.code);
   assert.ok(latest, "completed human game was recorded");
   assert.equal(latest.stakePaise, 500);
+  assert.ok(latest.details?.caller && latest.details.trump, "round story (caller + hukum) was recorded");
+  assert.ok(latest.details.tricks[0] + latest.details.tricks[1] > 0, "hands per team were recorded");
   assert.equal(result.settlement.transfers.reduce((sum, item) => sum + item.amountPaise, 0), 1_000);
   await assert.rejects(() => clients[0].emit("start_new_settlement_day"), /both confirmations/);
 

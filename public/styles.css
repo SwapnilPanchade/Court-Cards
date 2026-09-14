@@ -2782,3 +2782,62 @@ body::before {
   14%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -56%) scale(.98); }
 }
+
+/* ---- Mobile interaction fixes: switch flow, sheets, touch targets ----
+   Earlier layers stack conflicting !important top/bottom/transform rules on
+   .panel, which pushed sheets off-screen in short landscape. `#app #game`
+   outranks every one of those selectors, so these rules are the final word. */
+#app #game .seat-switch-button { position: relative; z-index: 13; min-height: 30px; margin-top: 4px; padding: 6px 11px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); background: color-mix(in srgb, var(--surface-solid) 90%, transparent); font-size: 10px; font-weight: 800; letter-spacing: .02em; touch-action: manipulation; }
+#app #game .seat-kick-button { min-height: 24px; padding: 4px 9px; font-size: 8px; opacity: .9; touch-action: manipulation; }
+
+.switch-targets { margin: 0 0 12px; }
+.switch-target-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 7px; }
+.switch-target { min-height: 44px; display: grid; gap: 1px; margin: 0; padding: 6px 10px; text-align: left; touch-action: manipulation; }
+.switch-target b { font-size: 11px; }
+.switch-target small { color: var(--muted); font-size: 8px; }
+.round-panel .switch-targets { margin: 12px 0; text-align: left; }
+
+/* Incoming request: centred modal above every sheet, the hand and the HUD. */
+#app #game .team-switch-panel { z-index: 80; left: 50% !important; right: auto !important; top: 50% !important; bottom: auto !important; width: min(360px, calc(100vw - 32px)) !important; max-width: none; max-height: calc(100dvh - 24px); overflow-y: auto; padding: 16px 18px; border: 1px solid var(--accent); text-align: center; transform: translate(-50%, -50%) !important; box-shadow: 0 0 0 100vmax rgba(3, 5, 9, .62), 0 24px 60px rgba(0, 0, 0, .5); animation: none; }
+#app #game .team-switch-panel::before { display: none; }
+#app #game .team-switch-panel h2 { font-size: 18px; }
+#app #game .team-switch-panel p { font-size: 11px; }
+#app #game .team-switch-panel .restart-actions button { min-height: 46px; margin: 0; }
+/* Outgoing request: small non-blocking card under the header. */
+#app #game .team-switch-panel.is-waiting { z-index: 45; top: calc(var(--safe-top) + 44px) !important; width: min(300px, calc(100vw - 32px)) !important; padding: 8px 12px; transform: translateX(-50%) !important; box-shadow: 0 12px 30px rgba(0, 0, 0, .4); }
+#app #game .team-switch-panel.is-waiting .eyebrow { display: none; }
+#app #game .team-switch-panel.is-waiting h2 { font-size: 13px; }
+#app #game .team-switch-panel.is-waiting p { margin: 2px 0 0; font-size: 9px; }
+
+@media (orientation: landscape) and (max-height: 560px) {
+  /* Docked right-hand sheets start below the header and never leave the screen. */
+  #app #game .panel:not(.team-switch-panel) { left: auto !important; right: max(8px, env(safe-area-inset-right)) !important; top: calc(var(--safe-top) + 42px) !important; bottom: auto !important; max-height: calc(100dvh - var(--safe-top) - 50px); overflow-y: auto; transform: none !important; }
+  #app #game:has(#hand:not(:empty)) .panel:not(.team-switch-panel):not(.round-panel) { max-height: calc(100dvh - var(--safe-top) - 146px); }
+  #app #game #lobby-panel:not(.hidden) { display: flex; flex-direction: column; bottom: max(8px, env(safe-area-inset-bottom)) !important; }
+  #app #game #lobby-panel .panel-scroll { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+  #app #game #lobby-panel .lobby-actions { flex: none; margin-top: 8px; }
+  /* Keep every seat (and its switch button) visible beside setup/result sheets. */
+  #app #game:has(#lobby-panel:not(.hidden)) .table-wrap,
+  #app #game:has(#round-panel:not(.hidden)) .table-wrap { right: calc(min(324px, 40vw) + 12px); width: auto; }
+  /* Explicit sizes: a percentage width is ignored inside the content-sized grid. */
+  #app #game:has(#lobby-panel:not(.hidden)) .table,
+  #app #game:has(#round-panel:not(.hidden)) .table { --docked-table-w: calc(100vw - min(324px, 40vw) - 20px); width: var(--docked-table-w) !important; height: min(96dvh, calc(var(--docked-table-w) * 855 / 1840 + 90px)) !important; }
+  #app #game .table .seat-bottom { left: 50%; }
+}
+
+@media (orientation: portrait) and (max-width: 680px) {
+  /* The setup sheet starts below the header + status row instead of covering it. */
+  #app #game #lobby-panel { top: calc(var(--safe-top) + 104px) !important; bottom: max(8px, env(safe-area-inset-bottom)) !important; max-height: none; overflow: hidden; }
+  /* Only the settings scroll; the action bar never covers the team buttons. */
+  #app #game #lobby-panel:not(.hidden) { display: flex; flex-direction: column; }
+  #app #game #lobby-panel .panel-scroll { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+  #app #game #lobby-panel .lobby-actions { flex: none; margin-top: 8px; }
+}
+
+#app #game .team-switch-panel .team-switch-cancel { width: 100%; min-height: 34px; margin: 7px 0 0; font-size: 10px; }
+
+/* Round story under each ledger game. */
+.ledger-game-detail { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 10px; padding-top: 6px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 8px; line-height: 1.4; }
+.ledger-game-detail b { color: var(--ink); font-weight: 800; }
+.ledger-game-detail .is-made { color: #73e7ae; }
+.ledger-game-detail .is-failed { color: #ff7886; }

@@ -143,3 +143,49 @@ test("only completed bilateral payments reduce the live balance", () => {
   ]);
   assert.throws(() => applyCompletedPayments(balances, [{ from: "Swapnil", to: "Swapnil", amountPaise: 500 }]), /invalid/);
 });
+
+test("ledger entries keep the round story: caller, bids, contract and hands", () => {
+  const room = {
+    code: "STORY",
+    gameType: "court-piece",
+    score: [3, 2],
+    players: [player("Swapnil"), player("Ajit"), player("Pradeep"), player("Ajay")]
+  };
+  const settlement = createRoundSettlement(room, () => "story-1");
+  const entry = settlementEntryForRound(room, {
+    phase: "round_over",
+    winner: 1,
+    settlement,
+    mode: "single",
+    auctionMode: true,
+    caller: 1,
+    trump: "hearts",
+    tricks: [4, 5],
+    court: false,
+    passedBy: [],
+    bidState: {
+      contractBid: 6,
+      contractTeam: 1,
+      contractMade: false,
+      decision: "give",
+      history: [
+        { seat: 0, action: "forced_bid", bid: 5 },
+        { seat: 1, action: "bid", bid: 6 },
+        { seat: 2, action: "pass", bid: null },
+        { seat: 0, action: "give", bid: 6 }
+      ]
+    }
+  }, 3_000);
+
+  assert.equal(entry.details.caller, "Ajit");
+  assert.equal(entry.details.trump, "hearts");
+  assert.equal(entry.details.auction, true);
+  assert.deepEqual(entry.details.tricks, [4, 5]);
+  assert.deepEqual(entry.details.roomScore, [3, 2]);
+  assert.deepEqual(entry.details.contract, { team: 1, bid: 6, holder: "Ajit", made: false, decision: "give" });
+  assert.deepEqual(entry.details.bids.map((item) => `${item.player}:${item.action}:${item.bid}`), [
+    "Swapnil:forced_bid:5", "Ajit:bid:6", "Pradeep:pass:null", "Swapnil:give:6"
+  ]);
+  // Games recorded before details existed stay valid.
+  assert.equal(summarizeSettlement([{ ...entry, details: undefined }]).games[0].details, null);
+});
