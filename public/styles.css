@@ -2352,11 +2352,116 @@ body::before {
   }
 }
 
-@media (orientation: landscape) and (min-width: 900px) and (min-height: 600px) {
-  .game:has(#theme-atelier:checked) .panel {
-    top: 124px !important;
+/* Tablet/laptop Atelier uses one layout owner. Size the artwork against the
+   remaining stage, not the viewport behind the HUD, hand, and setup sheets.
+   Short landscape and phone portrait retain their existing mobile layout. */
+@media (min-width: 681px) and (min-height: 561px) {
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    gap: 8px;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .game-header {
+    position: relative;
+    inset: auto;
+    grid-area: 1 / 1 / 2 / -1;
+    min-width: 0;
+    padding: 0;
+    grid-template-columns: minmax(90px, 1fr) minmax(240px, 2fr) minmax(140px, 1fr);
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .scoreboard { min-width: 0; width: 100%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .game-meta {
+    position: relative;
+    inset: auto;
+    grid-area: 2 / 1 / 3 / -1;
+    margin: 0;
+    flex-wrap: wrap;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table-wrap {
+    position: relative;
+    inset: auto;
+    grid-area: 3 / 1 / 4 / -1;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0 !important;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    container-type: size;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table {
+    width: min(100cqw, calc(100cqh * 1840 / 855)) !important;
+    max-width: none;
+    height: auto !important;
+    min-height: 0;
+    aspect-ratio: 1840 / 855;
+    border: 0;
+    border-radius: 0;
+    background-size: 100% 100%;
+    box-shadow: none;
+    overflow: visible;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat-top { left: 50%; top: 14%; transform: translateX(-50%) !important; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat-left { left: 5.5%; top: 43%; transform: translateY(-50%) !important; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat-right { right: 5.5%; top: 43%; transform: translateY(-50%) !important; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat-bottom { left: 50%; bottom: 12% !important; transform: translateX(-50%) !important; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat .avatar { width: clamp(32px, 4.7cqw, 64px) !important; height: clamp(32px, 4.7cqw, 64px) !important; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat .seat-nameplate { padding: 4px 8px; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat .seat-cards { right: -3px; top: 34px; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table .seat .captured-pile { left: -4px; top: 34px; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .played-card[data-seat="0"] { left: 50%; top: 61%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .played-card[data-seat="2"] { left: 50%; top: 40%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .played-card[data-seat="1"] { left: 45%; top: 51%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .played-card[data-seat="3"] { left: 55%; top: 51%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .trick { --played-card-w: clamp(34px, 5cqw, 64px); }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .hand-label { display: none !important; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .hand {
+    position: relative;
+    inset: auto;
+    grid-area: 5 / 1 / 6 / -1;
+    justify-self: center;
+    width: min(100%, 980px) !important;
+    min-height: 0;
+    margin: 0;
+    transform: none;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .hand:empty { display: none; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) > .panel:not(.team-switch-panel) {
+    position: relative;
+    inset: auto !important;
+    grid-area: 4 / 1 / 5 / -1;
+    align-self: center;
+    justify-self: center;
+    width: min(100%, 430px) !important;
+    max-width: none;
+    max-height: 42dvh;
+    margin: 0;
+    overflow-y: auto;
     transform: none !important;
   }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) > .lobby-panel:not(.hidden) { display: flex; flex-direction: column; overflow: hidden; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .lobby-panel .panel-scroll { flex: 1 1 auto; min-height: 0; max-height: 24dvh; overflow-y: auto; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .lobby-actions { flex: none; margin-top: 8px; }
+}
+
+@media (min-width: 681px) and (min-height: 561px) and (orientation: landscape) {
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked):has(> .panel:not(.hidden):not(.team-switch-panel)) {
+    grid-template-columns: minmax(0, 1fr) min(32vw, 330px);
+    column-gap: 18px;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked):has(> .panel:not(.hidden):not(.team-switch-panel)) .table-wrap { grid-column: 1; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) > .panel:not(.team-switch-panel) {
+    grid-area: 3 / 2 / 4 / 3;
+    width: 100% !important;
+    max-height: 100%;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .lobby-panel .panel-scroll { max-height: 45dvh; }
 }
 
 /* Atelier's Ace-overruled moment clones the live Ace and Hukum cards. The
