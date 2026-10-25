@@ -2448,6 +2448,44 @@ body::before {
   body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) > .lobby-panel:not(.hidden) { display: flex; flex-direction: column; overflow: hidden; }
   body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .lobby-panel .panel-scroll { flex: 1 1 auto; min-height: 0; max-height: 24dvh; overflow-y: auto; }
   body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .lobby-actions { flex: none; margin-top: 8px; }
+
+  /* Six players have their own seat/card map. All anchors use the artwork's
+     box, so resizing for a side panel keeps avatars and tricks together. */
+  .game:has(#theme-atelier:checked) .table[data-players="6"] { container-type: size; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .seat {
+    left: var(--seat-x);
+    top: var(--seat-y);
+    right: auto;
+    bottom: auto !important;
+    width: clamp(96px, 12cqw, 140px);
+    min-width: 0;
+    transform: translate(-50%, -50%) !important;
+  }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .seat-bottom { --seat-x: 50%; --seat-y: 88%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .seat-lower-left { --seat-x: 20%; --seat-y: 72%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .seat-upper-left { --seat-x: 20%; --seat-y: 28%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .seat-top { --seat-x: 50%; --seat-y: 13%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .seat-upper-right { --seat-x: 80%; --seat-y: 28%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .seat-lower-right { --seat-x: 80%; --seat-y: 72%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .seat .avatar {
+    width: clamp(30px, 4.2cqw, 58px) !important;
+    height: clamp(30px, 4.2cqw, 58px) !important;
+  }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .seat .seat-nameplate { max-width: 100%; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .seat .seat-player-name { min-width: 0; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .seat .seat-cards { top: 12px; right: 0; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .seat .captured-pile { top: 12px; left: 0; }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .trick { --played-card-w: clamp(26px, min(5cqw, 12cqh), 60px); }
+  body:not([data-game-type="judgment"]) .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card {
+    left: var(--trick-x);
+    top: var(--trick-y);
+  }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card[data-seat="0"] { --trick-x: 50%; --trick-y: 66%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card[data-seat="1"] { --trick-x: 36%; --trick-y: 64%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card[data-seat="2"] { --trick-x: 36%; --trick-y: 40%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card[data-seat="3"] { --trick-x: 50%; --trick-y: 34%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card[data-seat="4"] { --trick-x: 64%; --trick-y: 40%; }
+  .game:has(#theme-atelier:checked) .table[data-players="6"] .played-card[data-seat="5"] { --trick-x: 64%; --trick-y: 64%; }
 }
 
 @media (min-width: 681px) and (min-height: 561px) and (orientation: landscape) {
